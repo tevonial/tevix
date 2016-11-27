@@ -24,11 +24,11 @@
 #define PF_RESERVED (1<<3)     // Were the CPU-reserved bytes overwritten?
 #define PF_ID (0x10)           // Was the fault caused by an instruction fetch?
 
-typedef struct {
+/*typedef struct {
 	uint32_t *phys;
 	bool present[1024];
 	//page_table_t *pt[1024];
-} page_directory_t;
+} page_directory_t;*/
 
 void paging_init();
 uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags);

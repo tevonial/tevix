@@ -9,11 +9,9 @@
 #include <memory/paging.h>
 #include <core/interrupt.h>
 
-extern void load_page_dir(uint32_t *);
+extern void load_page_dir(uint32_t);
 extern void disable_pse();
 extern uint32_t get_faulting_address();
-
-page_directory_t page_directory;
 
 uint32_t *temp_pt;
 
@@ -29,35 +27,33 @@ void paging_init() {
     uint32_t *pt = (uint32_t *) kvalloc(sizeof(uint32_t) * 1024);
     temp_pt = (uint32_t *) kvalloc(sizeof(uint32_t) * 1024);
 
-    page_directory.phys = (uint32_t)pdt - VIRTUAL_BASE;
+    void *page_directory = (void *)pdt - VIRTUAL_BASE;
 
     // Wipe page directory
     uint32_t i;
     for (i=0; i < 1024; i++) {
         // Set all page directory entries to not present, read/write, supervisor
         pdt[i] = PD_RW;
-        page_directory.present[i] = false;
+        //page_directory.present[i] = false;
     }
 
     // Add page table containing kernel (#786)
     uint32_t table_index = VIRTUAL_BASE / 0x400000;
     pdt[table_index] |= ((uint32_t)pt - VIRTUAL_BASE) | PD_PRESENT;
-    page_directory.present[table_index] = true;
 
     // Map all paging structures to last 4MiB of memory
-    pdt[1023] |= (uint32_t)page_directory.phys | PD_PRESENT;
-    page_directory.present[1023] = true;
+    pdt[1023] |= (uint32_t)page_directory | PD_PRESENT;
 
     // Map from 0x0000 to the end of the kernel heap
-    for (i=0; i<meminfo.kernel_heap_curpos - VIRTUAL_BASE; i += 0x1000) {
+    for (i=0; i<meminfo.kernel_heap_end - VIRTUAL_BASE; i += 0x1000) {
         pt[i / 0x1000] = i | PT_RW | PT_PRESENT;
         bitmap_set(mem_bitmap, i / 0x1000);
     }
 
-    meminfo.kernel_brk = i + VIRTUAL_BASE;
+    meminfo.kernel_heap_brk = i + VIRTUAL_BASE;
 
     // Load new page directory
-    load_page_dir((uint32_t)page_directory.phys);
+    load_page_dir(page_directory);
     // Enable 4KiB pages
     disable_pse();
 }
@@ -95,13 +91,14 @@ uint32_t get_phys(void *virtualaddr)
     return ((pt[ptindex] & ~0xFFF) + ((unsigned long)virtualaddr & 0xFFF));
 }
 
+// Simply maps virtual to physical
 uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags) {
     uint32_t pdindex = virt >> 22;
     uint32_t ptindex = virt >> 12 & 0x03FF;
  
     uint32_t *pd = (uint32_t*)0xFFFFF000;
 
-    // Page directory entry in not present
+    // Page directory entry not present
     if (!(pd[pdindex] & PD_PRESENT)) {
         int temp_index = 0;
         if (ptindex == 0)
@@ -114,19 +111,24 @@ uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags) {
         // Map page table to its own first entry, unmap temp table
         uint32_t *new_pt = (uint32_t*)(pdindex << 22);
         new_pt[temp_index] = temp_pt[temp_index];
+
+        // Add table to directory
         pd[pdindex] = get_phys(new_pt) | PD_PRESENT  | PD_RW;
     }
  
     uint32_t *pt = ((uint32_t*)0xFFC00000) + (0x400 * pdindex);
  
     // Add page to corresponding page table
-    pt[ptindex] = phys | (pt_flags & 0xFFF) | 0x01;
+    pt[ptindex] = phys | (pt_flags & 0xFFF) | PT_PRESENT;
 
-    printf("0x%x mapped to 0x%x\n", phys, virt);
+    //printf("Map page 0x%x to phys 0x%x\n", virt, phys);
 
     return virt;
 }
 
+/**
+ * Map virtual address to first available physical page
+ */
 uint32_t map_page(uint32_t virt, uint32_t pt_flags) {
     return map_page_to_phys(virt, mem_allocate_frame() * 0x1000, pt_flags);
 }
