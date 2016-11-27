@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define MAX_HEAP_BLOCKS 1000
+
 typedef struct {
 	void *addr;
 	uint32_t size;
@@ -12,11 +14,11 @@ typedef struct {
 typedef struct {
 	uint32_t size;
 	uint32_t limit;
-	heap_block_t *block[1000];
+	heap_block_t *block[MAX_HEAP_BLOCKS];
 } heap_list_t;
 
 heap_list_t heap_list;
-heap_block_t free_blocks[1000];
+heap_block_t block_pool[MAX_HEAP_BLOCKS];
 
 void heap_init();
 

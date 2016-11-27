@@ -6,16 +6,16 @@
 
 
 void heap_init() {
-    heap_list.limit = 1000;
+    heap_list.limit = MAX_HEAP_BLOCKS;
     heap_list.size = 0;
 }
 
 heap_block_t *heap_list_add(void *addr, uint32_t size) {
     uint32_t i = 0;
-    while (free_blocks[i].addr != (void *)0)
+    while (block_pool[i].addr != (void *)0)
         i++;
 
-    heap_block_t *new_block = &free_blocks[i];
+    heap_block_t *new_block = &block_pool[i];
 
     new_block->addr = addr;
     new_block->size = size;
@@ -46,8 +46,6 @@ heap_block_t *heap_list_add(void *addr, uint32_t size) {
 }
 
 void heap_list_remove(heap_block_t *block) {
-    //printf("Rem  block 0x%x - 0x%x\n", block->addr, block->addr + block->size);
-
     block->addr = (void *)0;
     heap_list.size--;
 
@@ -62,20 +60,21 @@ void heap_list_remove(heap_block_t *block) {
 }
 
 void kfree(void *addr) {
-    uint32_t a = 0, i = 0, l = 0, r = 0;
     heap_block_t *left, *block, *right;
     left = right = heap_list.block[0];
 
     // Find indexes of block, block to left, and block to right
-    for (a=0; a<heap_list.size; a++) {
-        if (heap_list.block[a]->addr == addr)
-            block = heap_list.block[a]; //i = a; 
-        if (heap_list.block[a]->addr < addr &&
-            heap_list.block[a]->addr > left->addr)
-            left = heap_list.block[a]; //l = a;
-        if (heap_list.block[a]->addr > addr &&
-            heap_list.block[a]->addr < right->addr)
-            right = heap_list.block[a]; //r = a;
+    for (uint32_t i=0; i < heap_list.size; i++) {
+        if (heap_list.block[i]->addr == addr)
+            block = heap_list.block[i];
+
+        if (heap_list.block[i]->addr < addr &&
+            heap_list.block[i]->addr > left->addr)
+            left = heap_list.block[i];
+
+        if (heap_list.block[i]->addr > addr &&
+            heap_list.block[i]->addr < right->addr)
+            right = heap_list.block[i];
     }
 
     printf("kfree 0x%x - 0x%x\n", block->addr, block->addr + block->size);
@@ -83,34 +82,27 @@ void kfree(void *addr) {
     // Prepare to create new block
     void *new_addr = block->addr;
     uint32_t new_size = block->size;
-    bool rml = false, rmi = false, rmr = false;
 
     // Check if block to left is free
     if (left->addr + left->size == block->addr && left->free) {
         new_addr = left->addr;
         new_size += left->size;
-        rml = true;
-        rmi = true;
+
+        heap_list_remove(left);
     }
 
     // Check if block to right is free
     if (block->addr + block->size == right->addr && right->free) {
         new_size += right->size;
-        rmi = true;
-        rmr = true;
+
+        heap_list_remove(right);
     }
 
-    // Remove appropriate blocks
-    if (rml) heap_list_remove(left);
-    if (rmr) heap_list_remove(right);
-
-    if (rmi) {
+    if (new_addr) {
         heap_list_remove(block);
         // Create new, bigger block
         heap_list_add(new_addr, new_size);
-        //printf("Add  block 0x%x - 0x%x\n", new_addr, new_addr + new_size);
     } else {
-        //printf("Free block 0x%x - 0x%x\n", new_addr, new_addr + new_size);
         block->free = true;
     }
 }
