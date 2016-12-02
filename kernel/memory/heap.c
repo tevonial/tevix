@@ -82,11 +82,13 @@ void kfree(void *addr) {
     // Prepare to create new block
     void *new_addr = block->addr;
     uint32_t new_size = block->size;
+    bool do_new_block = false;
 
     // Check if block to left is free
     if (left->addr + left->size == block->addr && left->free) {
         new_addr = left->addr;
         new_size += left->size;
+        do_new_block = true;
 
         heap_list_remove(left);
     }
@@ -94,11 +96,12 @@ void kfree(void *addr) {
     // Check if block to right is free
     if (block->addr + block->size == right->addr && right->free) {
         new_size += right->size;
+        do_new_block = true;
 
         heap_list_remove(right);
     }
 
-    if (new_addr) {
+    if (do_new_block) {
         heap_list_remove(block);
         // Create new, bigger block
         heap_list_add(new_addr, new_size);
@@ -110,7 +113,7 @@ void kfree(void *addr) {
 void *kmalloc(uint32_t size) {
     heap_block_t *block;
 
-    for (int i=0; i<heap_list.size; i++) {
+    for (uint32_t i=0; i<heap_list.size; i++) {
         block = heap_list.block[i];
         if (block->size >= size && block->free == true) {
 
@@ -128,13 +131,14 @@ void *kmalloc(uint32_t size) {
     block = heap_list_add((void *)meminfo.kernel_heap_end, size);
     block->free = false;
 
-    printf("alloc 0x%x - 0x%x\n", block->addr, block->addr + block->size);
-
-    while (meminfo.kernel_heap_brk < (uint32_t)block->addr + size) {
-        map_page(meminfo.kernel_heap_brk, PT_RW);
-        meminfo.kernel_heap_brk += 0x1000;
-    }
+    // Increase the heap pointer
     meminfo.kernel_heap_end += size;
+
+    // Increase kernel heap size if needed
+    while (meminfo.kernel_heap_end > meminfo.kernel_heap_brk)
+        sbrk();
+
+    printf("alloc 0x%x - 0x%x\n", block->addr, block->addr + block->size);
 
     return block->addr;
 }
@@ -151,21 +155,24 @@ void *kvalloc(uint32_t size) {
         heap_list_add((void *)meminfo.kernel_heap_end, addr - meminfo.kernel_heap_end);
     }
 
-    // Increase kernel heap size if needed
-    while (addr + size > meminfo.kernel_heap_brk) {
-        map_page(meminfo.kernel_heap_brk, PT_RW);
-        meminfo.kernel_heap_brk += 0x1000;
-    }
-
-    // Increase the heap pointer
-    meminfo.kernel_heap_end = addr;
-    meminfo.kernel_heap_end += size;
-
     // Allocate block in heap
     heap_block_t *new_block = heap_list_add((void *)addr, size);
     new_block->free = false;
 
+    // Increase the heap pointer
+    meminfo.kernel_heap_end = addr + size;
+
+    // Increase kernel heap size if needed
+    while (meminfo.kernel_heap_end > meminfo.kernel_heap_brk)
+        sbrk();
+
     printf("alloc 0x%x - 0x%x\n", addr, addr + size);
 
     return (void *)addr;
+}
+
+// Increase kernel heap size by one page increments
+void sbrk() {
+    map_page(meminfo.kernel_heap_brk, PT_RW);
+    meminfo.kernel_heap_brk += 0x1000;
 }

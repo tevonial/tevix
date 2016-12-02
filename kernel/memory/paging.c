@@ -79,16 +79,21 @@ void _page_fault_handler(struct regs *r) {
 
 uint32_t get_phys(void *virtualaddr)
 {
-    unsigned long pdindex = (unsigned long)virtualaddr >> 22;
-    unsigned long ptindex = (unsigned long)virtualaddr >> 12 & 0x03FF;
+    uint32_t pdindex = (uint32_t)virtualaddr >> 22;
+    uint32_t ptindex = (uint32_t)virtualaddr >> 12 & 0x03FF;
  
-    unsigned long * pd = (unsigned long *)0xFFFFF000;
-    // Here you need to check whether the PD entry is present.
+    uint32_t *pd = (uint32_t *)0xFFFFF000; 
+    uint32_t *pt = ((uint32_t *)0xFFC00000) + (0x400 * pdindex);
+
+    // Check presence of PDE
+    if (!(pd[pdindex] & PD_PRESENT))
+        return -1;
+
+    // Check presence of PTE
+    if (!(pt[ptindex] & PT_PRESENT))
+        return -1;
  
-    unsigned long * pt = ((unsigned long *)0xFFC00000) + (0x400 * pdindex);
-    // Here you need to check whether the PT entry is present.
- 
-    return ((pt[ptindex] & ~0xFFF) + ((unsigned long)virtualaddr & 0xFFF));
+    return ((pt[ptindex] & ~0xFFF) + ((uint32_t)virtualaddr & 0xFFF));
 }
 
 // Simply maps virtual to physical
@@ -131,4 +136,8 @@ uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags) {
  */
 uint32_t map_page(uint32_t virt, uint32_t pt_flags) {
     return map_page_to_phys(virt, mem_allocate_frame() * 0x1000, pt_flags);
+}
+
+bool is_page_mapped(void *addr) {
+    return (get_phys(addr) != -1);
 }

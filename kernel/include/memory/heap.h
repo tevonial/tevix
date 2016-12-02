@@ -25,5 +25,6 @@ void heap_init();
 void kfree(void *addr);
 void *kmalloc(uint32_t size);
 void *kvalloc(uint32_t size);
+void sbrk();
 
 #endif

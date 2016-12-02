@@ -34,6 +34,7 @@ void paging_init();
 uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags);
 uint32_t map_page(uint32_t virt, uint32_t pt_flags);
 uint32_t get_phys(void *virt);
+bool is_page_mapped(void *addr);
 
 void _page_fault_handler(struct regs *r);
 
