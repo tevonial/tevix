@@ -43,15 +43,13 @@ static struct dirent *initrd_readdir(fs_node_t *node, uint32_t index) {
     return &dirent;
 }
 
-static fs_node_t *initrd_finddir(fs_node_t *node, uint32_t inode) {
-    if (node == initrd_root && inode == 0)
-        return initrd_root;
+static fs_node_t *initrd_finddir(fs_node_t *node, char *name) {
+    if (node == initrd_root && !strcmp(name, "dev") )
+       return initrd_dev;
 
-    if (node == initrd_root && inode == 1)
-        return initrd_dev;
-
-    if (node == initrd_root && inode - 2 < nroot_nodes)
-        return &root_nodes[inode - 2];
+    for (int i = 0; i < nroot_nodes; i++)
+       if (!strcmp(name, root_nodes[i].name))
+           return &root_nodes[i];
 
     return 0;
 }
@@ -59,7 +57,7 @@ static fs_node_t *initrd_finddir(fs_node_t *node, uint32_t inode) {
 fs_node_t *initrd_init(uint32_t location) {
     // Initialise the main and file header pointers and populate the root directory.
     initrd_header = (initrd_header_t *)location;
-    file_headers = (initrd_file_header_t *) ((uint32_t)location+sizeof(initrd_header_t));
+    file_headers = (initrd_file_header_t *)((uint32_t)location + sizeof(initrd_header_t));
 
     if (initrd_header->magic != INITRD_MAGIC) {
         printf("Invalid initial ramdisk");
