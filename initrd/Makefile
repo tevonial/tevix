@@ -1,11 +1,11 @@
-all: fs_gen
+all: rdgen
 
-fs_gen: fs_gen.c
+rdgen: rdgen.c
 	gcc -g -Wall -std=gnu99 -o $@ $<
 
 clean:
-	rm fs_gen initrd
+	rm rdgen initrd
 
-install: fs_gen
-	./fs_gen src initrd
+install: rdgen
+	./rdgen src initrd
 	cp initrd $(DESTDIR)$(BOOTDIR)

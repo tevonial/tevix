@@ -1,5 +1,5 @@
 SYSTEM_HEADER_PROJECTS="libc kernel"
-PROJECTS="libc kernel"
+PROJECTS="libc kernel initrd"
 
 export PATH="$HOME/opt/cross/bin:$PATH"
 
