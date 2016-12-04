@@ -13,3 +13,7 @@ done
 for PROJECT in $PROJECTS; do
   (cd $PROJECT && DESTDIR="$SYSROOT" $MAKE install)
 done
+
+#Install initrd to sysroot
+cd initrd && DESTDIR="$SYSROOT" $MAKE install
+cd ..
