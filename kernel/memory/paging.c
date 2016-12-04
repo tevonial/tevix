@@ -14,6 +14,7 @@ extern void disable_pse();
 extern uint32_t get_faulting_address();
 
 uint32_t *temp_pt;
+page_directory_t *current_pd;
 
 /**
  * Constructs new paging structures to allow for 4KiB page sizes
@@ -23,35 +24,38 @@ void paging_init() {
     // Install page fault handler
     isr_install_handler(14, _page_fault_handler);
 
-    uint32_t *pdt = (uint32_t *) kvalloc(sizeof(uint32_t) * 1024);
-    uint32_t *pt = (uint32_t *) kvalloc(sizeof(uint32_t) * 1024);
+    page_directory_t *pd = (page_directory_t *)kvalloc(sizeof(page_directory_t));
+    page_table_t *pt = (page_table_t *)kvalloc(sizeof(page_table_t));
     temp_pt = (uint32_t *) kvalloc(sizeof(uint32_t) * 1024);
 
-    void *page_directory = (void *)pdt - VIRTUAL_BASE;
+    pd->phys = ((uint32_t) pd->table_phys) - VIRTUAL_BASE;
 
     // Set all page directory entries to not present, read/write, supervisor
     uint32_t i;
     for (i=0; i < 1024; i++) {
-        pdt[i] = PD_RW;
+        pd->table_phys[i] = PD_RW;
     }
 
     // Add page table containing kernel (#786)
-    uint32_t table_index = VIRTUAL_BASE / 0x400000;
-    pdt[table_index] |= ((uint32_t)pt - VIRTUAL_BASE) | PD_PRESENT;
+    uint32_t kernel_table = VIRTUAL_BASE / 0x400000;
+
+    pd->table[kernel_table] = pt;
+    pd->table_phys[kernel_table] |= ((uint32_t)pt - VIRTUAL_BASE) | PD_PRESENT;
 
     // Map all paging structures to last 4MiB of memory
-    pdt[1023] |= (uint32_t)page_directory | PD_PRESENT;
+    pd->table_phys[1023] |= (uint32_t)pd->phys | PD_PRESENT;
 
     // Map from 0x0000 to the end of the kernel heap
     for (i=0; i<meminfo.kernel_heap_end - VIRTUAL_BASE; i += 0x1000) {
-        pt[i / 0x1000] = i | PT_RW | PT_PRESENT;
+        pd->table[kernel_table]->page[i / 0x1000] = i | PT_RW | PT_PRESENT;
         bitmap_set(mem_bitmap, i / 0x1000);
     }
 
     meminfo.kernel_heap_brk = i + VIRTUAL_BASE;
+    current_pd = pd;
 
     // Load new page directory
-    load_page_dir(page_directory);
+    load_page_dir(pd->phys);
     // Enable 4KiB pages
     disable_pse();
 }
@@ -112,11 +116,12 @@ uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags) {
         pd[pdindex] = get_phys(temp_pt) | PD_PRESENT | PD_RW;
 
         // Map page table to its own first entry, unmap temp table
-        uint32_t *new_pt = (uint32_t*)(pdindex << 22);
+        uint32_t *new_pt = (uint32_t*)((pdindex << 22) + temp_index * 0x1000);
         new_pt[temp_index] = temp_pt[temp_index];
 
         // Add table to directory
         pd[pdindex] = get_phys(new_pt) | PD_PRESENT  | PD_RW;
+        current_pd->table[pdindex] = new_pt;
     }
  
     uint32_t *pt = ((uint32_t*)0xFFC00000) + (0x400 * pdindex);
