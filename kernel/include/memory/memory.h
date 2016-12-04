@@ -45,9 +45,12 @@ struct i386_mem_info {
     uint32_t mem_lower;
     uint32_t mem_upper;
     uint32_t highest_free_address;
+    uint32_t initrd_start;
+    uint32_t initrd_end;
 };
 
 extern struct i386_mem_info meminfo;
+
 
 void mem_init();
 void mem_init_bitmap();

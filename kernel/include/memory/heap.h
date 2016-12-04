@@ -26,5 +26,6 @@ void kfree(void *addr);
 void *kmalloc(uint32_t size);
 void *kvalloc(uint32_t size);
 void sbrk();
+void brk(void *addr);
 
 #endif

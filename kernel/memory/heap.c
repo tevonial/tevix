@@ -12,7 +12,7 @@ void heap_init() {
 
 heap_block_t *heap_list_add(void *addr, uint32_t size) {
     uint32_t i = 0;
-    while (block_pool[i].addr != (void *)0)
+    while (block_pool[i].size != 0)
         i++;
 
     heap_block_t *new_block = &block_pool[i];
@@ -46,7 +46,7 @@ heap_block_t *heap_list_add(void *addr, uint32_t size) {
 }
 
 void heap_list_remove(heap_block_t *block) {
-    block->addr = (void *)0;
+    block->size = 0;
     heap_list.size--;
 
     uint32_t i = 0;
@@ -77,7 +77,7 @@ void kfree(void *addr) {
             right = heap_list.block[i];
     }
 
-    printf("kfree 0x%x - 0x%x\n", block->addr, block->addr + block->size);
+    //printf("kfree 0x%x - 0x%x\n", block->addr, block->addr + block->size - 1);
 
     // Prepare to create new block
     void *new_addr = block->addr;
@@ -122,7 +122,7 @@ void *kmalloc(uint32_t size) {
                 heap_list_add((void *)((uint32_t)block->addr + size), block->size - size);
                 block->size = size;
             }
-            printf("alloc 0x%x - 0x%x\n", block->addr, block->addr + block->size);
+            //printf("alloc 0x%x - 0x%x\n", block->addr, block->addr + block->size - 1);
             return block->addr;
         }
     }
@@ -135,10 +135,10 @@ void *kmalloc(uint32_t size) {
     meminfo.kernel_heap_end += size;
 
     // Increase kernel heap size if needed
-    while (meminfo.kernel_heap_end > meminfo.kernel_heap_brk)
+    while (meminfo.kernel_heap_end >= meminfo.kernel_heap_brk)
         sbrk();
 
-    printf("alloc 0x%x - 0x%x\n", block->addr, block->addr + block->size);
+    //printf("alloc 0x%x - 0x%x\n", block->addr, block->addr + block->size - 1);
 
     return block->addr;
 }
@@ -163,10 +163,10 @@ void *kvalloc(uint32_t size) {
     meminfo.kernel_heap_end = addr + size;
 
     // Increase kernel heap size if needed
-    while (meminfo.kernel_heap_end > meminfo.kernel_heap_brk)
+    while (meminfo.kernel_heap_end >= meminfo.kernel_heap_brk)
         sbrk();
 
-    printf("alloc 0x%x - 0x%x\n", addr, addr + size);
+    //printf("alloc 0x%x - 0x%x\n", addr, addr + size - 1);
 
     return (void *)addr;
 }
@@ -175,4 +175,16 @@ void *kvalloc(uint32_t size) {
 void sbrk() {
     map_page(meminfo.kernel_heap_brk, PT_RW);
     meminfo.kernel_heap_brk += 0x1000;
+}
+
+// Increase kernel heap to specified address
+void brk(void *addr) {
+    uint32_t i = meminfo.kernel_heap_brk;
+    while (i < (uint32_t)addr) {
+        if (!is_page_mapped((void *)i)) {
+            map_page(i, PT_RW);
+            i += 0x1000;
+        }
+    }
+    meminfo.kernel_heap_brk = (uint32_t)addr;
 }

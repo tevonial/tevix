@@ -24,19 +24,16 @@
 #define PF_RESERVED (1<<3)     // Were the CPU-reserved bytes overwritten?
 #define PF_ID (0x10)           // Was the fault caused by an instruction fetch?
 
-/*typedef struct {
-	uint32_t *phys;
-	bool present[1024];
-	//page_table_t *pt[1024];
-} page_directory_t;*/
 
 void paging_init();
 uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags);
 uint32_t map_page(uint32_t virt, uint32_t pt_flags);
 uint32_t get_phys(void *virt);
-bool is_page_mapped(void *addr);
-
 void _page_fault_handler(struct regs *r);
+
+inline bool is_page_mapped(void *addr) {
+    return (get_phys(addr) != -1);
+}
 
 static inline void __flush_tlb_single(unsigned long addr) {
    asm volatile("invlpg (%0)" ::"r" (addr) : "memory");

@@ -25,10 +25,12 @@ void _load_mbi(uint32_t _mboot_magic, multiboot_info_t *_mbi) {
 }
 
 /**
- * Initalize free memory and pass information to kernel_mem frame allocator
+ * Read multiboot information and initialize memory frame bitmap.
+ * Initialize physical and virtual memory managers
  */
 void mem_init() {
     mbi = (uint32_t)mbi + VIRTUAL_BASE;
+    printf("mbi location: 0x%x\n", mbi);
 
     // Ensure multiboot has supplied required information
     if (mboot_magic != MULTIBOOT_BOOTLOADER_MAGIC ||
@@ -49,6 +51,15 @@ void mem_init() {
     meminfo.mem_upper = mbi->mem_upper;
     meminfo.mem_lower = mbi->mem_lower;
 
+    if (mbi->flags & (1<<3)) {
+        multiboot_module_t *mod = (multiboot_module_t *) (mbi->mods_addr + VIRTUAL_BASE);
+        meminfo.initrd_start = mod->mod_start + VIRTUAL_BASE;
+        meminfo.initrd_end = mod->mod_end + VIRTUAL_BASE;
+        printf("Module loaded to 0x%x - 0x%x\n", meminfo.initrd_start, meminfo.initrd_end);
+    } else {
+        printf("No module loaded\n");
+    }
+
     // Parse ELF sections
     elf_sections_read();
 
@@ -56,7 +67,7 @@ void mem_init() {
     meminfo.highest_free_address = meminfo.mem_upper * 1024;
 
     // Start the kernel heap on the first page-aligned address after the kernel
-    meminfo.kernel_heap_start = (meminfo.kernel_reserved_end + 0x1000) & 0xFFFFF000;
+    meminfo.kernel_heap_start = (meminfo.initrd_end + 0x1000) & 0xFFFFF000;
     meminfo.kernel_heap_end = meminfo.kernel_heap_start;
 
     //Initialize brk to 4MiB past virtual base address
@@ -66,14 +77,12 @@ void mem_init() {
     heap_init();
 
     // Allocate required memory for mem frame bitset and mark reserved frames
-    uint32_t bitmap_size = meminfo.highest_free_address/0x1000;
-
-    // Round up size of bitmap to align with the size of a uint32_t (4 bytes)
-    if (bitmap_size % sizeof(uint32_t) != 0)
-        bitmap_size += bitmap_size % sizeof(uint32_t);
+    uint32_t bitmap_size = meminfo.highest_free_address / (0x1000 * 32);
+    if (meminfo.highest_free_address % (0x1000 * 32) != 0)
+        bitmap_size++;
 
     // Allocate bitmap
-    mem_bitmap = (uint32_t *)kvalloc(meminfo.highest_free_address/PAGE_SIZE);
+    mem_bitmap = (uint32_t *)kvalloc(bitmap_size * sizeof(uint32_t));
     memset((void *)mem_bitmap, 0, meminfo.highest_free_address/PAGE_SIZE);
     mem_init_bitmap();
 }

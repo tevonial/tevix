@@ -29,12 +29,10 @@ void paging_init() {
 
     void *page_directory = (void *)pdt - VIRTUAL_BASE;
 
-    // Wipe page directory
+    // Set all page directory entries to not present, read/write, supervisor
     uint32_t i;
     for (i=0; i < 1024; i++) {
-        // Set all page directory entries to not present, read/write, supervisor
         pdt[i] = PD_RW;
-        //page_directory.present[i] = false;
     }
 
     // Add page table containing kernel (#786)
@@ -77,10 +75,10 @@ void _page_fault_handler(struct regs *r) {
     abort();
 }
 
-uint32_t get_phys(void *virtualaddr)
+uint32_t get_phys(void *virt)
 {
-    uint32_t pdindex = (uint32_t)virtualaddr >> 22;
-    uint32_t ptindex = (uint32_t)virtualaddr >> 12 & 0x03FF;
+    uint32_t pdindex = (uint32_t)virt >> 22;
+    uint32_t ptindex = (uint32_t)virt >> 12 & 0x03FF;
  
     uint32_t *pd = (uint32_t *)0xFFFFF000; 
     uint32_t *pt = ((uint32_t *)0xFFC00000) + (0x400 * pdindex);
@@ -93,7 +91,7 @@ uint32_t get_phys(void *virtualaddr)
     if (!(pt[ptindex] & PT_PRESENT))
         return -1;
  
-    return ((pt[ptindex] & ~0xFFF) + ((uint32_t)virtualaddr & 0xFFF));
+    return ((pt[ptindex] & ~0xFFF) + ((uint32_t)virt & 0xFFF));
 }
 
 // Simply maps virtual to physical
@@ -106,8 +104,8 @@ uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags) {
     // Page directory entry not present
     if (!(pd[pdindex] & PD_PRESENT)) {
         int temp_index = 0;
-        if (ptindex == 0)
-            temp_index++;
+        // Cannot map page table to the same location as the requested page
+        if (ptindex == 0) temp_index++;
 
         // Map a page for the new page table using temporary page table
         temp_pt[temp_index] = mem_allocate_frame() * 0x1000 | PT_PRESENT | PT_RW;
@@ -136,8 +134,4 @@ uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags) {
  */
 uint32_t map_page(uint32_t virt, uint32_t pt_flags) {
     return map_page_to_phys(virt, mem_allocate_frame() * 0x1000, pt_flags);
-}
-
-bool is_page_mapped(void *addr) {
-    return (get_phys(addr) != -1);
 }
