@@ -13,7 +13,6 @@ extern void load_page_dir(uint32_t);
 extern void disable_pse();
 extern uint32_t get_faulting_address();
 
-uint32_t *temp_pt;
 page_directory_t *current_pd;
 
 /**
@@ -24,38 +23,36 @@ void paging_init() {
     // Install page fault handler
     isr_install_handler(14, _page_fault_handler);
 
-    page_directory_t *pd = (page_directory_t *)kvalloc(sizeof(page_directory_t));
+    current_pd = (page_directory_t *)kvalloc(sizeof(page_directory_t));
     page_table_t *pt = (page_table_t *)kvalloc(sizeof(page_table_t));
-    temp_pt = (uint32_t *) kvalloc(sizeof(uint32_t) * 1024);
 
-    pd->phys = ((uint32_t) pd->table_phys) - VIRTUAL_BASE;
+    current_pd->phys = ((uint32_t) current_pd->table_phys) - VIRTUAL_BASE;
 
     // Set all page directory entries to not present, read/write, supervisor
     uint32_t i;
     for (i=0; i < 1024; i++) {
-        pd->table_phys[i] = PD_RW;
+        current_pd->table_phys[i] = PD_RW;
     }
 
     // Add page table containing kernel (#786)
     uint32_t kernel_table = VIRTUAL_BASE / 0x400000;
 
-    pd->table[kernel_table] = pt;
-    pd->table_phys[kernel_table] |= ((uint32_t)pt - VIRTUAL_BASE) | PD_PRESENT;
+    current_pd->table[kernel_table] = pt;
+    current_pd->table_phys[kernel_table] |= ((uint32_t)pt - VIRTUAL_BASE) | PD_PRESENT;
 
     // Map all paging structures to last 4MiB of memory
-    pd->table_phys[1023] |= (uint32_t)pd->phys | PD_PRESENT;
+    current_pd->table_phys[1023] |= (uint32_t)current_pd->phys | PD_PRESENT;
 
     // Map from 0x0000 to the end of the kernel heap
     for (i=0; i<meminfo.kernel_heap_end - VIRTUAL_BASE; i += 0x1000) {
-        pd->table[kernel_table]->page[i / 0x1000] = i | PT_RW | PT_PRESENT;
+        current_pd->table[kernel_table]->page[i / 0x1000] = i | PT_RW | PT_PRESENT;
         bitmap_set(mem_bitmap, i / 0x1000);
     }
 
     meminfo.kernel_heap_brk = i + VIRTUAL_BASE;
-    current_pd = pd;
 
     // Load new page directory
-    load_page_dir(pd->phys);
+    load_page_dir(current_pd->phys);
     // Enable 4KiB pages
     disable_pse();
 }
@@ -102,32 +99,19 @@ uint32_t get_phys(void *virt)
 uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags) {
     uint32_t pdindex = virt >> 22;
     uint32_t ptindex = virt >> 12 & 0x03FF;
- 
-    uint32_t *pd = (uint32_t*)0xFFFFF000;
 
     // Page directory entry not present
-    if (!(pd[pdindex] & PD_PRESENT)) {
-        int temp_index = 0;
-        // Cannot map page table to the same location as the requested page
-        if (ptindex == 0) temp_index++;
-
-        // Map a page for the new page table using temporary page table
-        temp_pt[temp_index] = mem_allocate_frame() * 0x1000 | PT_PRESENT | PT_RW;
-        pd[pdindex] = get_phys(temp_pt) | PD_PRESENT | PD_RW;
-
-        // Map page table to its own first entry, unmap temp table
-        uint32_t *new_pt = (uint32_t*)((pdindex << 22) + temp_index * 0x1000);
-        new_pt[temp_index] = temp_pt[temp_index];
+    if (!(current_pd->table_phys[pdindex] & PD_PRESENT)) {
+        // Create a new page table
+        page_table_t *new_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
 
         // Add table to directory
-        pd[pdindex] = get_phys(new_pt) | PD_PRESENT  | PD_RW;
+        current_pd->table_phys[pdindex] = get_phys(new_pt) | PD_PRESENT  | PD_RW;
         current_pd->table[pdindex] = new_pt;
     }
  
-    uint32_t *pt = ((uint32_t*)0xFFC00000) + (0x400 * pdindex);
- 
-    // Add page to corresponding page table
-    pt[ptindex] = phys | (pt_flags & 0xFFF) | PT_PRESENT;
+    // Add page to corresponding the new page table
+    current_pd->table[pdindex]->page[ptindex] = phys | (pt_flags & 0xFFF) | PT_PRESENT;
 
     //printf("Map page 0x%x to phys 0x%x\n", virt, phys);
 
@@ -139,4 +123,14 @@ uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags) {
  */
 uint32_t map_page(uint32_t virt, uint32_t pt_flags) {
     return map_page_to_phys(virt, mem_allocate_frame() * 0x1000, pt_flags);
+}
+
+void unmap_page(uint32_t virt) {
+    uint32_t pdindex = virt >> 22;
+    uint32_t ptindex = virt >> 12 & 0x03FF;
+
+    if (current_pd->table_phys[pdindex] & PD_PRESENT) {
+        current_pd->table[pdindex]->page[ptindex] &= !PT_PRESENT;
+        __flush_tlb_single(virt);
+    }
 }

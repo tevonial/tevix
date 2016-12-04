@@ -25,7 +25,7 @@
 #define PF_ID (0x10)           // Was the fault caused by an instruction fetch?
 
 typedef struct {
-	uint32_t page[1000];
+	uint32_t page[1024];
 } page_table_t;
 
 typedef struct {
@@ -44,8 +44,8 @@ inline bool is_page_mapped(void *addr) {
     return (get_phys(addr) != -1);
 }
 
-static inline void __flush_tlb_single(unsigned long addr) {
-   asm volatile("invlpg (%0)" ::"r" (addr) : "memory");
+static inline void __flush_tlb_single(uint32_t addr) {
+   asm volatile("invlpg (%0)" :: "r" (addr) : "memory");
 }
 
 static inline void invlpg(void* m) {
