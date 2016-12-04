@@ -5,12 +5,12 @@
 #include <sys/types.h>
 #include <dirent.h>
 
-#define FS_MAGIC	0x02468ACE
+#define RD_MAGIC	0x02468ACE
 
 struct {
 	uint32_t magic;
 	uint32_t size;
-} fs_header;
+} rd_header;
 
 typedef struct {
 	char name[32];
@@ -19,6 +19,7 @@ typedef struct {
 } file_descriptor_t;
 
 int main (int argc, char **argv) {
+
 	DIR *dir;
 	FILE *f, *out;
 	struct dirent *ep;
@@ -38,8 +39,8 @@ int main (int argc, char **argv) {
 
 	closedir(dir);
 
-	fs_header.magic = FS_MAGIC;
-	fs_header.size = nfiles;
+	rd_header.magic = RD_MAGIC;
+	rd_header.size = nfiles;
 	header = malloc(nfiles * sizeof(file_descriptor_t));
 
 	char fp[64];				// Full path of file
@@ -50,7 +51,7 @@ int main (int argc, char **argv) {
 	
 
 	// Skip header section
-	fseek(out, sizeof(fs_header) + nfiles * sizeof(file_descriptor_t), SEEK_SET);
+	fseek(out, sizeof(rd_header) + nfiles * sizeof(file_descriptor_t), SEEK_SET);
 	dir = opendir(argv[1]);
 
 	uint32_t i = 0;
@@ -72,7 +73,7 @@ int main (int argc, char **argv) {
 			fclose(f);
 			free(buffer);
 
-			printf("%s to %d-%d\n", fn, header[i].offset, header[i].offset + header[i].length);
+			printf("%s to %d-%d\n", fn, header[i].offset, header[i].offset + header[i].length - 1);
 
 			i++;
 		}
@@ -81,11 +82,11 @@ int main (int argc, char **argv) {
 	
 	// Add header to beginning of image
 	fseek(out, 0, SEEK_SET);
-	fwrite(&fs_header, sizeof(fs_header), 1, out);
+	fwrite(&rd_header, sizeof(rd_header), 1, out);
 	fwrite(header, sizeof(file_descriptor_t), nfiles, out);
 
 	fclose(out);
-	printf("Filesystem \"%s\" created with %d files\n", argv[2], nfiles);
+	printf("Ramdisk \"%s\" created with %d files\n", argv[2], nfiles);
 
 	return 0;
 }

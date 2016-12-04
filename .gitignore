@@ -5,3 +5,7 @@
 *.iso
 sysroot
 isodir
+.directory
+initrd/initrd
+initrd/rdgen
+initrd/src/
