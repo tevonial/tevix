@@ -25,7 +25,7 @@
 #define PF_ID (0x10)           // Was the fault caused by an instruction fetch?
 
 typedef struct {
-	uint32_t page[1024];
+	uint32_t page_phys[1024];
 } page_table_t;
 
 typedef struct {

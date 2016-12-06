@@ -45,7 +45,7 @@ void paging_init() {
 
     // Map from 0x0000 to the end of the kernel heap
     for (i=0; i<meminfo.kernel_heap_end - VIRTUAL_BASE; i += 0x1000) {
-        current_pd->table[kernel_table]->page[i / 0x1000] = i | PT_RW | PT_PRESENT;
+        current_pd->table[kernel_table]->page_phys[i / 0x1000] = i | PT_RW | PT_PRESENT;
         bitmap_set(mem_bitmap, i / 0x1000);
     }
 
@@ -68,7 +68,7 @@ void _page_fault_handler(struct regs *r) {
     bool reserved = (r->err_code & PF_RESERVED);
 
     // Dump information about fault to screen
-    printf("\nPAGE FAULT at 0x%x\n   Flags:", faulting_address);
+    printf("\nPAGE FAULT at 0x%x\nFlags:", faulting_address);
     if (present) printf(" [NOT PRESENT]");
     if (rw) printf(" [NOT WRITABLE]");
     if (us) printf(" [USERMODE]");
@@ -76,42 +76,41 @@ void _page_fault_handler(struct regs *r) {
     abort();
 }
 
-uint32_t get_phys(void *virt)
-{
-    uint32_t pdindex = (uint32_t)virt >> 22;
-    uint32_t ptindex = (uint32_t)virt >> 12 & 0x03FF;
+uint32_t get_phys(void *virt) {
+    uint32_t itable = (uint32_t)virt >> 22;
+    uint32_t ipage = (uint32_t)virt >> 12 & 0x03FF;
  
     uint32_t *pd = (uint32_t *)0xFFFFF000; 
-    uint32_t *pt = ((uint32_t *)0xFFC00000) + (0x400 * pdindex);
+    uint32_t *pt = ((uint32_t *)0xFFC00000) + (0x400 * itable);
 
     // Check presence of PDE
-    if (!(pd[pdindex] & PD_PRESENT))
+    if (!(pd[itable] & PD_PRESENT))
         return -1;
 
     // Check presence of PTE
-    if (!(pt[ptindex] & PT_PRESENT))
+    if (!(pt[ipage] & PT_PRESENT))
         return -1;
  
-    return ((pt[ptindex] & ~0xFFF) + ((uint32_t)virt & 0xFFF));
+    return ((pt[ipage] & ~0xFFF) + ((uint32_t)virt & 0xFFF));
 }
 
 // Simply maps virtual to physical
 uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags) {
-    uint32_t pdindex = virt >> 22;
-    uint32_t ptindex = virt >> 12 & 0x03FF;
+    uint32_t itable = virt >> 22;
+    uint32_t ipage = virt >> 12 & 0x03FF;
 
     // Page directory entry not present
-    if (!(current_pd->table_phys[pdindex] & PD_PRESENT)) {
+    if (!(current_pd->table_phys[itable] & PD_PRESENT)) {
         // Create a new page table
         page_table_t *new_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
 
         // Add table to directory
-        current_pd->table_phys[pdindex] = get_phys(new_pt) | PD_PRESENT  | PD_RW;
-        current_pd->table[pdindex] = new_pt;
+        current_pd->table_phys[itable] = get_phys(new_pt) | PD_PRESENT  | PD_RW;
+        current_pd->table[itable] = new_pt;
     }
  
     // Add page to corresponding the new page table
-    current_pd->table[pdindex]->page[ptindex] = phys | (pt_flags & 0xFFF) | PT_PRESENT;
+    current_pd->table[itable]->page_phys[ipage] = phys | (pt_flags & 0xFFF) | PT_PRESENT;
 
     //printf("Map page 0x%x to phys 0x%x\n", virt, phys);
 
@@ -126,11 +125,11 @@ uint32_t map_page(uint32_t virt, uint32_t pt_flags) {
 }
 
 void unmap_page(uint32_t virt) {
-    uint32_t pdindex = virt >> 22;
-    uint32_t ptindex = virt >> 12 & 0x03FF;
+    uint32_t itable = virt >> 22;
+    uint32_t ipage = virt >> 12 & 0x03FF;
 
-    if (current_pd->table_phys[pdindex] & PD_PRESENT) {
-        current_pd->table[pdindex]->page[ptindex] &= !PT_PRESENT;
+    if (current_pd->table_phys[itable] & PD_PRESENT) {
+        current_pd->table[itable]->page_phys[ipage] &= !PT_PRESENT;
         __flush_tlb_single(virt);
     }
 }
