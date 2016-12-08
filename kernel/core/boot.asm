@@ -6,7 +6,7 @@ MAGIC    equ  0x1BADB002        ; 'magic number' lets bootloader find the header
 CHECKSUM equ -(MAGIC + FLAGS)   ; checksum of above, to prove we are multiboot
 
 ; extern VIRTUAL_BASE				; Virtual base address of kernel 0xC0000000
-VIRTUAL_BASE equ 0xC0000000 
+VIRTUAL_BASE equ 0xC0000000
 
 ; Declare a multiboot header that marks the program as a kernel.
 section .multiboot
@@ -22,9 +22,11 @@ section .bss
 align 4
 
 stack_bottom:
-	resb 16384 ; 16 KiB
+	resb 8192 ;16384 ; 16 KiB
 stack_top:
 
+stack_info:
+    resd 3
 
 section .data
 align 0x1000
@@ -42,8 +44,7 @@ section .text
 align 4
 
 global _loader
-;_loader equ (loader); - VIRTUAL_BASE)
-
+global get_stack_info
 
 _loader:
 	mov ecx, (BOOT_PAGE_DIR - VIRTUAL_BASE)
@@ -61,6 +62,8 @@ _loader:
 	jmp ecx
 
 _high_start:
+
+	mov ebp, stack_bottom
 	mov esp, stack_top
 
 	mov dword [BOOT_PAGE_DIR], 0
@@ -86,3 +89,11 @@ _high_start:
 .hang:
 	hlt
 	jmp .hang
+
+
+get_stack_info:
+    mov eax, stack_info
+    mov DWORD [eax], stack_bottom
+    mov DWORD [eax + 4], stack_top
+    mov DWORD [eax + 8], esp
+    ret

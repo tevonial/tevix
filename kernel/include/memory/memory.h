@@ -7,6 +7,7 @@
 #include <memory/multiboot.h>
 #include <memory/paging.h>
 #include <memory/heap.h>
+#include <memory/vas.h>
 
 
 #define PAGE_SIZE 4096
