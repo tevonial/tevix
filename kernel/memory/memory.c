@@ -8,7 +8,6 @@
 #include <memory/bitmap.h>
 #include <memory/memory.h>
 
-
 // Multiboot data
 multiboot_info_t *mbi;
 uint32_t mboot_magic;
@@ -18,6 +17,7 @@ uint32_t *mem_bitmap;
 
 // Information about memory for kernel use
 struct i386_mem_info meminfo;
+uint32_t stack;
 
 void _load_mbi(uint32_t _mboot_magic, multiboot_info_t *_mbi) {
     mbi = _mbi;
@@ -28,9 +28,8 @@ void _load_mbi(uint32_t _mboot_magic, multiboot_info_t *_mbi) {
  * Read multiboot information and initialize memory frame bitmap.
  * Initialize physical and virtual memory managers
  */
-void mem_init() {
+void mem_init(uint32_t _mboot_magic, multiboot_info_t *_mbi) {
     mbi = (uint32_t)mbi + VIRTUAL_BASE;
-    printf("mbi location: 0x%x\n", mbi);
 
     // Ensure multiboot has supplied required information
     if (mboot_magic != MULTIBOOT_BOOTLOADER_MAGIC ||
@@ -55,9 +54,7 @@ void mem_init() {
         multiboot_module_t *mod = (multiboot_module_t *) (mbi->mods_addr + VIRTUAL_BASE);
         meminfo.initrd_start = mod->mod_start + VIRTUAL_BASE;
         meminfo.initrd_end = mod->mod_end + VIRTUAL_BASE;
-        printf("Module loaded to 0x%x - 0x%x\n", meminfo.initrd_start, meminfo.initrd_end);
-    } else {
-        printf("No module loaded\n");
+        //printf("Module loaded to 0x%x - 0x%x\n", meminfo.initrd_start, meminfo.initrd_end);
     }
 
     // Parse ELF sections

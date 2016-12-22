@@ -7,7 +7,6 @@
 #include <memory/multiboot.h>
 #include <memory/paging.h>
 #include <memory/heap.h>
-#include <memory/vas.h>
 
 
 #define PAGE_SIZE 4096
@@ -51,7 +50,6 @@ struct i386_mem_info {
 };
 
 extern struct i386_mem_info meminfo;
-
 
 void mem_init();
 void mem_init_bitmap();

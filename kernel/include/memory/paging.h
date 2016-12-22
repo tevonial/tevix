@@ -34,18 +34,24 @@ typedef struct {
 	uint32_t phys;
 } page_directory_t;
 
+extern page_directory_t *current_pd;
+extern page_directory_t *kernel_pd;
+
+extern void load_page_dir(uint32_t);
+extern void disable_pse();
+extern uint32_t get_faulting_address();
+
 void paging_init();
-uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t pt_flags);
-uint32_t map_page(uint32_t virt, uint32_t pt_flags);
+void switch_pd(page_directory_t * pd);
+uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t flags);
+uint32_t map_page(uint32_t virt, uint32_t flags);
 uint32_t get_phys(void *virt);
-void _page_fault_handler(struct regs *r);
+page_directory_t *clone_pd(page_directory_t* base);
+page_table_t *copy_pt(page_table_t *src);
+void page_fault_handler(registers_t *r);
 
 inline bool is_page_mapped(void *addr) {
     return (get_phys(addr) != -1);
-}
-
-static inline void __flush_tlb_single(uint32_t addr) {
-   asm volatile("invlpg (%0)" :: "r" (addr) : "memory");
 }
 
 static inline void invlpg(void* m) {
