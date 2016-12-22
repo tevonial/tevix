@@ -1,8 +1,9 @@
 #!/bin/sh
 set -e
 
+. ./iso.sh
+
 case $1 in
-	kernel)	qemu-system-x86_64 -kernel sysroot/boot/tevix.bin;;
-	"")	. ./iso.sh
-		qemu-system-x86_64 -cdrom tevix.iso;;
+	gdb) qemu-system-x86_64 -s -S -cdrom tevix.iso;;
+	"")	 qemu-system-x86_64 -cdrom tevix.iso;;
 esac

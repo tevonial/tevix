@@ -6,12 +6,12 @@ mkdir -p isodir
 mkdir -p isodir/boot
 mkdir -p isodir/boot/grub
 
-cp sysroot/boot/tevix.bin isodir/boot/
+cp sysroot/boot/$KERNEL isodir/boot/
 cp sysroot/boot/initrd isodir/boot/
 
 cat > isodir/boot/grub/grub.cfg << EOF
 menuentry "tevix" {
-	multiboot /boot/tevix.bin
+	multiboot /boot/$KERNEL
 	module /boot/initrd
 }
 EOF

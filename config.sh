@@ -17,6 +17,8 @@ export INCLUDEDIR=/usr/include
 export CFLAGS='-O2 -g'
 export CPPFLAGS=''
 
+export KERNEL=tevix.elf
+
 # Configure the cross-compiler to use the desired system root.
 export SYSROOT="$(pwd)/sysroot"
 export CC="$CC --sysroot=$SYSROOT"

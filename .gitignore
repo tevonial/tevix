@@ -2,10 +2,13 @@
 *.d
 *.a
 *.bin
+*.elf
 *.iso
 sysroot
 isodir
 .directory
 initrd/initrd
 initrd/rdgen
-initrd/src/
+initrd/root
+bochs*
+.gdbinit

@@ -6,11 +6,13 @@ LIBS:=$(LIBS) -nostdlib -lk -lgcc
 include core/make.config
 include driver/make.config
 include memory/make.config
+include task/make.config
 
 KERNEL_OBJS=\
 $(CORE_OBJS) \
 $(DRIVER_OBJS) \
 $(MEMORY_OBJS) \
+$(TASK_OBJS) \
 
 OBJS=\
 core/crti.o \
@@ -31,23 +33,23 @@ core/crtn.o \
 .PHONY: all clean install install-headers install-kernel
 #.SUFFIXES: .o .c .asm
 
-all: tevix.bin
+all: $(KERNEL)
 
-tevix.bin: $(OBJS) linker.ld
+$(KERNEL): $(OBJS) linker.ld
 	$(CC) -T linker.ld -o $@ $(CFLAGS) $(LINK_LIST)
-	grub-file --is-x86-multiboot tevix.bin
+	grub-file --is-x86-multiboot $(KERNEL)
 
 core/crtbegin.o core/crtend.o:
 	OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
 
 %.o : %.c
-	$(CC) -MD -c $< -o $@ -std=gnu11 $(CFLAGS) $(CPPFLAGS)
+	${CC} -MD -c $< -o $@ -std=gnu11 $(CFLAGS) $(CPPFLAGS)
 
 %.o : %.asm
 	${AS} -f elf -o $@ $<
 
 clean:
-	rm -f tevix.bin
+	rm -f $(KERNEL)
 	rm -f $(OBJS) *.o */*.o */*/*.o
 	rm -f $(OBJS:.o=.d) *.d */*.d */*/*.d
 
@@ -57,8 +59,8 @@ install-headers:
 	mkdir -p $(DESTDIR)$(INCLUDEDIR)
 	cp -R --preserve=timestamps include/. $(DESTDIR)$(INCLUDEDIR)/.
 
-install-kernel: tevix.bin
+install-kernel: $(KERNEL)
 	mkdir -p $(DESTDIR)$(BOOTDIR)
-	cp tevix.bin $(DESTDIR)$(BOOTDIR)
+	cp $(KERNEL) $(DESTDIR)$(BOOTDIR)
 
 -include $(OBJS:.o=.d)
