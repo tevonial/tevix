@@ -34,5 +34,6 @@ static inline uint16_t vga_entry(unsigned char uc, uint8_t color) {
 void vga_init(void);
 void vga_putch(char c);
 void vga_puts(const char* data);
+void vga_put_hex(uint32_t n);
 
 #endif
