@@ -5,7 +5,6 @@ FLAGS    equ  MBALIGN | MEMINFO ; this is the Multiboot 'flag' field
 MAGIC    equ  0x1BADB002        ; 'magic number' lets bootloader find the header
 CHECKSUM equ -(MAGIC + FLAGS)   ; checksum of above, to prove we are multiboot
 
-; extern VIRTUAL_BASE				; Virtual base address of kernel 0xC0000000
 VIRTUAL_BASE equ 0xC0000000
 
 ; Declare a multiboot header that marks the program as a kernel.
@@ -21,12 +20,12 @@ align 4
 section .bss
 align 4
 
-stack_bottom:
-	resb 8192 ;16384 ; 16 KiB
-stack_top:
+global stack_bottom
+global stack_top
 
-stack_info:
-    resd 3
+stack_bottom:
+	resb 8192
+stack_top:
 
 section .data
 align 0x1000
@@ -39,14 +38,13 @@ BOOT_PAGE_DIR:
 	times (1024 - KERNEL_PAGE - 1) dd 0
 
 
-
 section .text
 align 4
 
 global _loader
-global get_stack_info
 
 _loader:
+
 	mov ecx, (BOOT_PAGE_DIR - VIRTUAL_BASE)
 	mov cr3, ecx
 
@@ -63,23 +61,18 @@ _loader:
 
 _high_start:
 
-	mov ebp, stack_bottom
 	mov esp, stack_top
-
-	mov dword [BOOT_PAGE_DIR], 0
-	invlpg [0]
 
     ; Push multiboot header and magic
 	push ebx
     push eax
 
-	extern _load_mbi
-	call _load_mbi
-
 	; Call the global constructors.
 	extern _init
 	call _init
 
+	extern _load_mbi
+	call _load_mbi
 
 	; Transfer control to the main kernel.
 	extern kernel_main
@@ -89,11 +82,3 @@ _high_start:
 .hang:
 	hlt
 	jmp .hang
-
-
-get_stack_info:
-    mov eax, stack_info
-    mov DWORD [eax], stack_bottom
-    mov DWORD [eax + 4], stack_top
-    mov DWORD [eax + 8], esp
-    ret
