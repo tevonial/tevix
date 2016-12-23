@@ -15,18 +15,24 @@
 
 typedef struct task {
 	uint32_t pid;
-	page_directory_t *pd;
 	
 	uint32_t ebp;
 	uint32_t esp;
 	uint32_t eip;
 
+	uint8_t ring;
+	uint32_t esp0;
+
+	page_directory_t *pd;
 	struct task *next;
+
+	bool fresh;
 } task_t;
 
 uint32_t pids;
 task_t *todo;
 task_t *task;
+
 
 // thread.c
 extern uint32_t fork();

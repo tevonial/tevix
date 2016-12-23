@@ -1,16 +1,9 @@
 section .text
 
-extern stack_top
-
-global get_boot_stack
 global get_eip
 global become_user
 
 global switch_context
-
-get_boot_stack:
-    mov eax, stack_top
-    ret
 
 get_eip:
 	pop eax

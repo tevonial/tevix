@@ -20,12 +20,12 @@ align 4
 section .bss
 align 4
 
-global stack_bottom
-global stack_top
+global _init_stack_start
+global _init_stack_end
 
-stack_bottom:
-	resb 8192
-stack_top:
+_init_stack_start:
+	resb 0x1000
+_init_stack_end:
 
 section .data
 align 0x1000
@@ -61,7 +61,7 @@ _loader:
 
 _high_start:
 
-	mov esp, stack_top
+	mov esp, _init_stack_end
 
     ; Push multiboot header and magic
 	push ebx
