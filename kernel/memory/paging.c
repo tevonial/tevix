@@ -14,7 +14,6 @@ page_directory_t *kernel_pd;
 static void *tmp_src_page;
 static void *tmp_dst_page;
 
-extern struct gdt_ptr gp;
 /**
  * Constructs new paging structures to allow for 4KiB page sizes
  * and remaps kernel to the same location
@@ -57,8 +56,7 @@ void paging_init() {
     disable_pse();
 
     // Create new VAS and leave kernel_pd where it is
-    current_pd = clone_pd(kernel_pd);
-    switch_pd(current_pd);
+    switch_pd(clone_pd(kernel_pd));
 }
 
 void switch_pd(page_directory_t *pd) {
@@ -67,9 +65,6 @@ void switch_pd(page_directory_t *pd) {
 }
 
 void page_fault_handler(registers_t *r) {
-    // Get faulting address
-    uint32_t faulting_address = get_faulting_address();
-
     // Read error flags
     bool present = !(r->err_code & PF_PRESENT);
     bool rw = (r->err_code & PF_RW);
@@ -77,11 +72,11 @@ void page_fault_handler(registers_t *r) {
     bool reserved = (r->err_code & PF_RESERVED);
 
     // Dump information about fault to screen
-    printf("\nPAGE FAULT at 0x%x\nFlags:", faulting_address);
-    if (present) printf(" [NOT PRESENT]");
-    if (rw) printf(" [NOT WRITABLE]");
-    if (us) printf(" [USERMODE]");
-    if (reserved) printf(" [RESERVED]");
+    printf("\nPAGE FAULT at 0x%x\nFlags:", get_faulting_address());
+    if (!(r->err_code & PF_PRESENT)) printf(" [NONEXISTENT]");
+    if (r->err_code & PF_RW)         printf(" [READONLY]");
+    if (r->err_code & PF_USER)       printf(" [PRIVILEGE]");
+    if (r->err_code & PF_RESERVED)   printf(" [RESERVED]");
 
     printf("\nebp: %x esp: %x eax: %x ecx: %x edx: %x\n", r->ebp, r->esp, r->eax, r->ecx, r->edx);
     printf("ss=%x useresp=%x eflags=%x cs=%x eip=%x\n", r->ss, r->useresp, r->eflags, r->cs, r->eip);
@@ -152,7 +147,13 @@ void unmap_page(uint32_t virt) {
     uint32_t ipage = virt >> 12 & 0x03FF;
 
     if (current_pd->table_phys[itable] & PD_PRESENT) {
+        // Deallocate physical frame
+        mem_free_frame((uint32_t)current_pd->table[itable]->page_phys[ipage] / 0x1000);
+
+        // Remove mapping to page table
         current_pd->table[itable]->page_phys[ipage] &= !PT_PRESENT;
+        
+        // Notify MMU
         invlpg((void *)virt);
     }
 }
