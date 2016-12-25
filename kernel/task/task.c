@@ -23,7 +23,6 @@ void task_init() {
 
 	todo = task;
 
-
 	// Initialize PIT for task switching
 	irq_install_handler(0, switch_task);
 
@@ -77,6 +76,7 @@ void move_stack(uint32_t top, uint32_t size) {
 	asm volatile("sti");
 }
 
+
 void switch_task(registers_t *regs) {
 	static int x = 0;
 
@@ -109,23 +109,22 @@ void switch_task(registers_t *regs) {
 
 	task->fresh = true;
 
-	printf("PID %d esp0 %x\n", task->pid, task->esp0);
+	// printf("PID: %d\n", task->pid);
 
 	switch_context(task->eip, current_pd->phys, task->ebp, task->esp); 
 }
 
 uint32_t fork() {
+	asm volatile("cli");
+
 	uint32_t esp, ebp;
 	asm volatile("mov %%esp, %0" : "=r" (esp));
 	asm volatile("mov %%ebp, %0" : "=r" (ebp));
 
 	uint32_t eip = get_eip();
 
-	if (eip == 1) {
-		return 0;
-	}
-
-	asm volatile("cli");
+	if (eip == 1)
+		return task->pid;
 
 	task_t *new = (task_t *)kmalloc(sizeof(task_t));
 

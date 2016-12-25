@@ -1,12 +1,13 @@
 #include <core/interrupt.h>
 #include <driver/vga.h>
+#include <task/task.h>
 
 static void syscall_handler(registers_t *regs);
 
 static void *syscalls[2] =
 {
    &vga_puts,
-   &vga_put_hex
+   &fork
 };
 uint32_t num_syscalls = 2;
 

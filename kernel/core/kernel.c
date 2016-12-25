@@ -5,7 +5,6 @@
 #include <driver/initrd.h>
 #include <task/task.h>
 
-
 void kernel_main(void) {
 	gdt_init();
 	idt_init();
@@ -37,11 +36,14 @@ void kernel_main(void) {
 		i++;
 	}
 
+	int child = fork();
 
-	fork();
-
-	printf("Loading /helloworld.bin\n");
-	exec("helloworld.bin");
-
+	if (child == task->pid) {
+		printf("\nLoading /helloworld.bin\n");
+		exec("helloworld.bin");
+	} else {
+		exec("second.bin");
+	}
+	
 	for (;;);
 }
