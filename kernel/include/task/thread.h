@@ -1,5 +1,5 @@
-#ifndef __TASK_TASK_H
-#define __TASK_TASK_H
+#ifndef __TASK_THREAD_H
+#define __TASK_THREAD_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -13,38 +13,37 @@
 #define USER_DS	   0x23
 #define USER_STACK 0xBFFFFFFC
 
-typedef struct task {
-	uint32_t pid;
-	
+
+typedef struct thread {	
 	uint32_t ebp;
 	uint32_t esp;
+	uint32_t eax;
+	uint32_t cr3;
 	uint32_t eip;
 
+	uint32_t pid;
 	uint8_t ring;
 	uint32_t esp0;
-
 	page_directory_t *pd;
-	struct task *next;
 
-	bool fresh;
-} task_t;
+	struct thread *next;
+} thread_t;
 
 uint32_t pids;
-task_t *todo;
-task_t *task;
+thread_t *thread;
 
 
 // thread.c
+extern thread_t *thread_init();
+extern void move_stack();
 extern uint32_t fork();
 extern void exec(char *name);
-extern void switch_task();
-extern void switch_to_user_mode();
+extern void preempt(registers_t *regs);
 extern void syscall_init();
 
 // context.asm
 extern uint32_t get_eip();
-extern uint32_t get_boot_stack();
-extern void switch_context(uint32_t eip, uint32_t esp, uint32_t ebp, uint32_t pd);
+extern void switch_context(thread_t *from, thread_t *to);
 extern void become_user(uint32_t ds, uint32_t esp, uint32_t cs, void *eip);
 
 #endif

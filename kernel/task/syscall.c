@@ -1,6 +1,6 @@
 #include <core/interrupt.h>
 #include <driver/vga.h>
-#include <task/task.h>
+#include <task/thread.h>
 
 static void syscall_handler(registers_t *regs);
 

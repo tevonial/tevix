@@ -6,40 +6,28 @@
 #include <core/gdt.h>
 #include <memory/memory.h>
 #include <driver/fs.h>
-#include <task/task.h>
+#include <task/thread.h>
+#include <task/scheduler.h>
 
-task_t *task;
+thread_t *thread;
 
-void task_init() {
-	move_stack(0xf0000000, 0x4000);
+thread_t *thread_init() {
+	// Init pid counter
 	pids = 0;
 
-	// First and current thread
-	task = (task_t *)kmalloc(sizeof(task_t));
-	task->pid = pids++;
-	task->pd = current_pd;
-	task->ring = 0;
-	task->next = 0;
+	// Create initial thread
+	thread = (thread_t *)kmalloc(sizeof(thread_t));
+	thread->pid = pids++;
+	thread->pd = current_pd;
+	thread->ring = 0;
+	thread->cr3 = thread->pd->phys;
 
-	todo = task;
-
-	// Initialize PIT for task switching
-	irq_install_handler(0, switch_task);
-
-	uint32_t divisor = 1193180 / 50;
-	
-	outportb(0x43, 0x36);					// Command byte.
-
-	outportb(0x40, divisor & 0xFF);			// Low byte
-	outportb(0x40, (divisor>>8) & 0xFF);	// High byte
-
+	return thread;
 }
 
 void move_stack(uint32_t top, uint32_t size) {
 	extern void _init_stack_start();
 	extern void _init_stack_end();
-
-	asm volatile("cli");
 
 	uint32_t init_ebp, init_esp;
 	asm volatile("mov %%esp, %0" : "=r" (init_esp));
@@ -54,10 +42,6 @@ void move_stack(uint32_t top, uint32_t size) {
 	for (uint32_t i=top; i>= (top-size); i-=0x1000)
 		map_page(i, PT_RW | PT_USER);
 
-	uint32_t pd_addr;
-	asm volatile("mov %%cr3, %0" : "=r" (pd_addr));
-	asm volatile("mov %0, %%cr3" : : "r" (pd_addr));
-
 	for (uint32_t i=0; i<top - esp; i++) {
 		if (old[i] >= init_esp && old[i] <= _init_stack_end)
 			new[i] = top - ((uint32_t)_init_stack_end - old[i]);
@@ -66,85 +50,73 @@ void move_stack(uint32_t top, uint32_t size) {
 	}
 	
 	// New stack location open for business
+	asm volatile("cli");
 	asm volatile("mov %0, %%esp;" : : "r" (esp));
 	asm volatile("mov %0, %%ebp;" : : "r" (ebp));
+	asm volatile("sti");
 
 	// Clear and add old stack space to the heap
 	memset(_init_stack_start, 0, _init_stack_end - _init_stack_start);
 	heap_list_add(_init_stack_start, _init_stack_end - _init_stack_start);
-
-	asm volatile("sti");
 }
 
-
-void switch_task(registers_t *regs) {
-	static int x = 0;
-
-	if (x++ % 20 > 0)
+void preempt(registers_t *regs) {
+	if (thread == 0)
 		return;
 
-	if (task == 0)
-		return;
+	thread_t *old = thread;
 
-	uint32_t eip = get_eip();
-	if (eip == 1) {
-	  	return;	// New task is has now started
-	}
-
-	task->eip = eip;
-	asm volatile("mov %%esp, %0" : "=r" (task->esp));
-	asm volatile("mov %%ebp, %0" : "=r" (task->ebp));
-
-
-	task = task->next;
-	if (task == 0)
-		task = todo;
+	thread = scheduler_next();
 
 	// Set current page directory
-	current_pd = task->pd;
+	current_pd = thread->pd;
 
 	// Set kernel stack pointer in tss
-	if (task->ring)
-		tss.esp0 = task->esp0;
+	if (thread->ring)
+		tss.esp0 = thread->esp0;
 
-	task->fresh = true;
-
-	// printf("PID: %d\n", task->pid);
-
-	switch_context(task->eip, current_pd->phys, task->ebp, task->esp); 
+	switch_context(old, thread);
 }
 
+void print_stack(uint32_t *stack) {
+	for (int i=0; i<10; i++) {
+		printf("[esp + %d] = 0x%x\n", i*4, *(stack + i));
+	}
+} 
+
 uint32_t fork() {
+	// Forked thread execution starts at eip
+	uint32_t eip = get_eip();
+
+	// Forked thread has started
+	if (eip == 0)
+		return thread->pid;
+
 	asm volatile("cli");
 
+	// Stack pointers for new thread
 	uint32_t esp, ebp;
 	asm volatile("mov %%esp, %0" : "=r" (esp));
 	asm volatile("mov %%ebp, %0" : "=r" (ebp));
 
-	uint32_t eip = get_eip();
+	thread_t *fork_thread = (thread_t *)kmalloc(sizeof(thread_t));
 
-	if (eip == 1)
-		return task->pid;
+	fork_thread->pid = pids++;
+	fork_thread->pd = clone_pd(thread->pd);
+	fork_thread->ring = thread->ring;
+	fork_thread->esp0 = thread->esp0;
 
-	task_t *new = (task_t *)kmalloc(sizeof(task_t));
+	fork_thread->esp = esp + 0;
+	fork_thread->ebp = ebp;
+	fork_thread->eip = eip;
 
-	new->pid = pids++;
-	new->pd = clone_pd(task->pd);
-	new->ring = task->ring;
-	new->esp0 = task->esp0;
+	fork_thread->eax = 0;
+	fork_thread->cr3 = fork_thread->pd->phys;
 
-	new->esp = esp;
-	new->ebp = ebp;
-	new->eip = eip;
-
-	new->next = todo;
-	todo = new;
-
+	scheduler_add(fork_thread);
 
 	asm volatile("sti");
-
-	return new->pid;
-
+	return fork_thread->pid;
 }
 
 void exec(char *name) {
@@ -163,8 +135,8 @@ void exec(char *name) {
 	// Load binary to 0x00000000
 	fs_read(node, 0, node->length, (void *)0);
 
-	asm volatile("mov %%esp, %0" : "=r" (task->esp0));
-	tss.esp0 = task->esp0;
+	asm volatile("mov %%esp, %0" : "=r" (thread->esp0));
+	tss.esp0 = thread->esp0;
 
 	// Start executing as user
 	become_user(USER_DS, USER_STACK, USER_CS, (void *)0x0);
