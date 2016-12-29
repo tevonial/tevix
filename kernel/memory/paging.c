@@ -39,9 +39,6 @@ void paging_init() {
     kernel_pd->table[kernel_table] = pt;
     kernel_pd->table_phys[kernel_table] |= ((uint32_t)pt - VIRTUAL_BASE) | PT_PRESENT;
 
-    // Map all paging structures to last 4MiB of memory
-    //kernel_pd->table_phys[1023] |= (uint32_t)kernel_pd->phys | PD_PRESENT;
-
     // Map from 0x0000 to the end of the kernel heap
     for (i=0; i<meminfo.kernel_heap_end - VIRTUAL_BASE; i += 0x1000) {
         kernel_pd->table[kernel_table]->page_phys[i / 0x1000] = i | PT_RW | PT_PRESENT;
@@ -87,18 +84,9 @@ uint32_t get_phys(void *virt) {
     uint32_t itable = (uint32_t)virt >> 22;
     uint32_t ipage = (uint32_t)virt >> 12 & 0x03FF;
  
-    /*uint32_t *pd = (uint32_t *)0xFFFFF000; 
-    uint32_t *pt = ((uint32_t *)0xFFC00000) + (0x400 * itable);
-
-    // Check presence of PDE
-    if (!(pd[itable] & PD_PRESENT))
-        return -1;
-
-    // Check presence of PTE
-    if (!(pt[ipage] & PT_PRESENT))
-        return -1;
- 
-    return ((pt[ipage] & ~0xFFF) + ((uint32_t)virt & 0xFFF));*/
+    /* If paging stuctures were mapped to last PDE
+    uint32_t *pd = (uint32_t *)0xFFFFF000; 
+    uint32_t *pt = ((uint32_t *)0xFFC00000) + (0x400 * itable);*/
 
     // Check presence of PDE
     if (!(current_pd->table_phys[itable] & PT_PRESENT))

@@ -2,6 +2,7 @@
 #define __MEMORY_HEAP_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define MAX_HEAP_BLOCKS 1000
 
