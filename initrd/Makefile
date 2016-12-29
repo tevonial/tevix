@@ -5,6 +5,7 @@ LIBS:=$(LIBS) -nostdlib -lk -lgcc
 
 USER_PROGRAMS=\
 src/helloworld.bin\
+src/fork_test.bin\
 
 
 all: rdgen $(USER_PROGRAMS)
