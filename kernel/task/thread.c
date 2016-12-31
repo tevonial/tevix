@@ -25,40 +25,28 @@ thread_t *thread_init() {
 	return thread;
 }
 
-void move_stack(uint32_t top, uint32_t size) {
-	extern void _init_stack_start();
-	extern void _init_stack_end();
+thread_t *construct_thread(void *start) {
+	thread_t *new_thread = (thread_t *)kmalloc(sizeof(thread_t));
 
-	uint32_t init_ebp, init_esp;
-	asm volatile("mov %%esp, %0" : "=r" (init_esp));
-	asm volatile("mov %%ebp, %0" : "=r" (init_ebp));
+	new_thread->pid = pids++;
+	new_thread->pd = clone_pd(thread->pd);
+	new_thread->ring = 0;
 
-	uint32_t ebp = top - ((uint32_t)_init_stack_end - init_ebp);
-	uint32_t esp = top - ((uint32_t)_init_stack_end - init_esp);
+	new_thread->esp = KSTACK;
+	new_thread->ebp = KSTACK;
+	new_thread->eip = (uint32_t)start;
 
-	uint32_t *old = (uint32_t *)init_esp;
-	uint32_t *new = (uint32_t *)esp;
+	new_thread->eax = 0;
+	new_thread->cr3 = new_thread->pd->phys;
 
-	for (uint32_t i=top; i>= (top-size); i-=0x1000)
-		map_page(i, PT_RW | PT_USER);
-
-	for (uint32_t i=0; i<top - esp; i++) {
-		if (old[i] >= init_esp && old[i] <= _init_stack_end)
-			new[i] = top - ((uint32_t)_init_stack_end - old[i]);
-		else
-			new[i] = old[i];
-	}
-	
-	// New stack location open for business
-	asm volatile("cli");
-	asm volatile("mov %0, %%esp;" : : "r" (esp));
-	asm volatile("mov %0, %%ebp;" : : "r" (ebp));
-	asm volatile("sti");
-
-	// Clear and add old stack space to the heap
-	memset(_init_stack_start, 0, _init_stack_end - _init_stack_start);
-	heap_list_add(_init_stack_start, _init_stack_end - _init_stack_start);
+	return new_thread;
 }
+
+void print_stack(uint32_t *stack) {
+	for (int i=0; i<10; i++) {
+		printf("[esp + %d] = 0x%x\n", i*4, *(stack + i));
+	}
+} 
 
 void preempt(registers_t *regs) {
 	if (thread == 0)
@@ -78,11 +66,6 @@ void preempt(registers_t *regs) {
 	switch_context(old, thread);
 }
 
-void print_stack(uint32_t *stack) {
-	for (int i=0; i<10; i++) {
-		printf("[esp + %d] = 0x%x\n", i*4, *(stack + i));
-	}
-} 
 
 uint32_t fork() {
 	// Forked thread execution starts at eip
@@ -118,6 +101,7 @@ uint32_t fork() {
 	asm volatile("sti");
 	return fork_thread->pid;
 }
+
 
 void exec(char *name) {
 	fs_node_t *node = fs_finddir(fs_root, name);

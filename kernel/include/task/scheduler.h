@@ -2,10 +2,7 @@
 #define __TASK_SCHEDULER_H
 
 #include <stdint.h>
-
-#include <memory/heap.h>
 #include <task/thread.h>
-
 
 typedef struct {
 	thread_t *thread[1000];

@@ -2,6 +2,7 @@
 #define __MEMORY_PAGING_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include <core/interrupt.h>
 
@@ -41,14 +42,15 @@ extern void load_page_dir(uint32_t);
 extern void disable_pse();
 extern uint32_t get_faulting_address();
 
-void paging_init();
-void switch_pd(page_directory_t * pd);
-uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t flags);
-uint32_t map_page(uint32_t virt, uint32_t flags);
-uint32_t get_phys(void *virt);
-page_directory_t *clone_pd(page_directory_t* base);
-page_table_t *copy_pt(page_table_t *src);
-void page_fault_handler(registers_t *r);
+extern void paging_init();
+extern void switch_pd(page_directory_t * pd);
+extern uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t flags);
+extern uint32_t map_page(uint32_t virt, uint32_t flags);
+extern uint32_t get_phys(void *virt);
+extern void move_stack(uint32_t stack, uint32_t limit);
+extern page_directory_t *clone_pd(page_directory_t* base);
+extern page_table_t *copy_pt(page_table_t *src);
+extern void page_fault_handler(registers_t *r);
 
 inline bool is_page_mapped(void *addr) {
     return (get_phys(addr) != -1);

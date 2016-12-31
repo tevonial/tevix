@@ -1,10 +1,11 @@
+#include <memory/paging.h>
 #include <task/scheduler.h>
 
 scheduler_queue_t *queue;
 
 void multitask_init() {
 	// Move kernel stack to uniform location
-	move_stack(0xf0000000, 0x4000);
+	move_stack(KSTACK, KSTACK_LIM);
 
 	// Initialize and schedule first thread
 	queue = (scheduler_queue_t *)kmalloc(sizeof(scheduler_queue_t));

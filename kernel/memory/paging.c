@@ -146,6 +146,41 @@ void unmap_page(uint32_t virt) {
     }
 }
 
+void move_stack(uint32_t stack, uint32_t limit) {
+    extern void _init_stack_start();
+    extern void _init_stack_end();
+
+    uint32_t init_ebp, init_esp;
+    asm volatile("mov %%esp, %0" : "=r" (init_esp));
+    asm volatile("mov %%ebp, %0" : "=r" (init_ebp));
+
+    uint32_t ebp = stack - ((uint32_t)_init_stack_end - init_ebp);
+    uint32_t esp = stack - ((uint32_t)_init_stack_end - init_esp);
+
+    uint32_t *old = (uint32_t *)init_esp;
+    uint32_t *new = (uint32_t *)esp;
+
+    for (uint32_t i=stack; i>= (stack-limit); i-=0x1000)
+        map_page(i, PT_RW | PT_USER);
+
+    for (uint32_t i=0; i<stack - esp; i++) {
+        if (old[i] >= init_esp && old[i] <= _init_stack_end)
+            new[i] = stack - ((uint32_t)_init_stack_end - old[i]);
+        else
+            new[i] = old[i];
+    }
+    
+    // New stack location open for business
+    asm volatile("cli");
+    asm volatile("mov %0, %%esp;" : : "r" (esp));
+    asm volatile("mov %0, %%ebp;" : : "r" (ebp));
+    asm volatile("sti");
+
+    // Clear and add old stack space to the heap
+    memset(_init_stack_start, 0, _init_stack_end - _init_stack_start);
+    heap_list_add(_init_stack_start, _init_stack_end - _init_stack_start);
+}
+
 
 page_directory_t *clone_pd(page_directory_t* src) {
     page_directory_t *new_pd = (page_directory_t *)kvalloc(sizeof(page_directory_t));
