@@ -30,6 +30,26 @@ void scheduler_add(thread_t *thread) {
 	thread_queue = thread;
 }
 
+void scheduler_remove(thread_t *thread) {
+	// If thread if the first in queue
+	if (thread == thread_queue) {
+		thread_queue = thread_queue->next;
+		return;
+	}
+
+	thread_t *iterator = thread_queue;
+	while (iterator) {
+		if (iterator->next == thread)
+			iterator->next = iterator->next->next;
+		else
+			iterator = iterator->next;
+	}
+
+	// Skip thread immediately if running
+	if (thread == current_thread)
+		preempt();
+}
+
 thread_t *scheduler_next() {
 	// if (++queue->current >= queue->total)
 	// 	queue->current = 0;
@@ -37,7 +57,7 @@ thread_t *scheduler_next() {
 	// return queue->thread[queue->current];
 
 	thread_t *next;
-	next = thread->next;
+	next = current_thread->next;
 	if (next == 0)
 		next = thread_queue;
 
