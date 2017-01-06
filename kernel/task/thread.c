@@ -9,27 +9,27 @@
 #include <task/thread.h>
 #include <task/scheduler.h>
 
-thread_t *thread;
+thread_t *current_thread;
 
 thread_t *thread_init() {
 	// Init pid counter
 	pids = 0;
 
 	// Create initial thread
-	thread = (thread_t *)kmalloc(sizeof(thread_t));
-	thread->pid = pids++;
-	thread->pd = current_pd;
-	thread->ring = 0;
-	thread->cr3 = thread->pd->phys;
+	current_thread = (thread_t *)kmalloc(sizeof(thread_t));
+	current_thread->pid = pids++;
+	current_thread->pd = current_pd;
+	current_thread->ring = 0;
+	current_thread->cr3 = current_thread->pd->phys;
 
-	return thread;
+	return current_thread;
 }
 
 thread_t *construct_thread(void *start) {
 	thread_t *new_thread = (thread_t *)kmalloc(sizeof(thread_t));
 
 	new_thread->pid = pids++;
-	new_thread->pd = clone_pd(thread->pd);
+	new_thread->pd = clone_pd(current_thread->pd);
 	new_thread->ring = 0;
 
 	new_thread->esp = KSTACK;
@@ -48,22 +48,22 @@ void print_stack(uint32_t *stack) {
 	}
 } 
 
-void preempt(registers_t *regs) {
-	if (thread == 0)
+void preempt() {
+	if (current_thread == 0)
 		return;
 
-	thread_t *old = thread;
+	thread_t *old = current_thread;
 
-	thread = scheduler_next();
+	current_thread = scheduler_next();
 
 	// Set current page directory
-	current_pd = thread->pd;
+	current_pd = current_thread->pd;
 
 	// Set kernel stack pointer in tss
-	if (thread->ring)
-		tss.esp0 = thread->esp0;
+	if (current_thread->ring)
+		tss.esp0 = current_thread->esp0;
 
-	switch_context(old, thread);
+	switch_context(old, current_thread);
 }
 
 
@@ -73,7 +73,7 @@ uint32_t fork() {
 
 	// Forked thread has started
 	if (eip == 0)
-		return thread->pid;
+		return current_thread->pid;
 
 	asm volatile("cli");
 
@@ -85,9 +85,9 @@ uint32_t fork() {
 	thread_t *fork_thread = (thread_t *)kmalloc(sizeof(thread_t));
 
 	fork_thread->pid = pids++;
-	fork_thread->pd = clone_pd(thread->pd);
-	fork_thread->ring = thread->ring;
-	fork_thread->esp0 = thread->esp0;
+	fork_thread->pd = clone_pd(current_thread->pd);
+	fork_thread->ring = current_thread->ring;
+	fork_thread->esp0 = current_thread->esp0;
 
 	fork_thread->esp = esp + 0;
 	fork_thread->ebp = ebp;
@@ -119,8 +119,8 @@ void exec(char *name) {
 	// Load binary to 0x00000000
 	fs_read(node, 0, node->length, (void *)0);
 
-	asm volatile("mov %%esp, %0" : "=r" (thread->esp0));
-	tss.esp0 = thread->esp0;
+	asm volatile("mov %%esp, %0" : "=r" (current_thread->esp0));
+	tss.esp0 = current_thread->esp0;
 
 	// Start executing as user
 	become_user(USER_DS, USER_STACK, USER_CS, (void *)0x0);

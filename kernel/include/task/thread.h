@@ -32,14 +32,14 @@ typedef struct thread {
 } thread_t;
 
 uint32_t pids;
-thread_t *thread;
+thread_t *current_thread;
 
 
 // thread.c
 extern thread_t *thread_init();
 extern thread_t *constuct_thread(void *start);
 extern uint32_t fork();
-extern void preempt(registers_t *regs);
+extern void preempt();
 extern void exec(char *name);
 
 // context.asm

@@ -161,7 +161,7 @@ void move_stack(uint32_t stack, uint32_t limit) {
     uint32_t *new = (uint32_t *)esp;
 
     for (uint32_t i=stack; i>= (stack-limit); i-=0x1000)
-        map_page(i, PT_RW | PT_USER);
+        map_page(i, PT_RW);
 
     for (uint32_t i=0; i<stack - esp; i++) {
         if (old[i] >= init_esp && old[i] <= _init_stack_end)
