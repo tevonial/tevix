@@ -15,6 +15,8 @@
 
 
 extern void kb_handler();
+static void shift_key();
+
 extern unsigned char kb_chetchar();
 extern uint32_t kb_gets(char *buf);
 
