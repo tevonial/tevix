@@ -13,9 +13,8 @@
 #define KB_STATUS_IN  2
 
 
-
 extern void kb_handler();
-static void shift_key();
+static unsigned char shift_key(unsigned char c);
 
 extern unsigned char kb_chetchar();
 extern uint32_t kb_gets(char *buf);
