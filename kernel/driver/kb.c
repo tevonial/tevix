@@ -33,7 +33,7 @@ enum special_key {
     CTRL = 0x1D
 };
 
-static volatile unsigned char buf[100];
+static volatile unsigned char buf[KB_BUF_MAX];
 static volatile uint8_t buf_i = 0;
 static volatile uint8_t buf_len = 0;
 
@@ -68,31 +68,25 @@ void kb_handler() {
         }
 
         // Character key was pressed
+        unsigned char c = key_map[scancode];
+
         uint8_t i = buf_i + buf_len++;
-        if (i == 100)
-            i -= 100;
+        if (i == KB_BUF_MAX)
+            i -= KB_BUF_MAX;
 
+        // Capitalize (if shift and caps not both set)
+        if (c >= 'a' && c <= 'z' && (shift ^ caps))
+            buf[i] = c - 32;
 
-        if (shift | caps)
-            buf[i] = shift_key(key_map[scancode]);
+        // Symbol (if shift set)
+        else if (c >= '\'' && c <= '`' && shift)
+            buf[i] = shift_map[c - '\''];
+
         else
-            buf[i] = key_map[scancode];
-        
+            buf[i] = c;        
     }
 }
 
-static unsigned char shift_key(unsigned char c) {
-    // Capitalize (if shift and caps not both set)
-    if (c >= 'a' && c <= 'z' && (shift ^ caps))
-        return c - 32;
-
-    // Symbol (if shift set)
-    else if (c >= '\'' && c <= '`' && shift)
-        return shift_map[c - '\''];
-
-
-    return c;
-}
 
 // Wait for buffer, return first char
 unsigned char kb_getchar() {
@@ -103,7 +97,7 @@ unsigned char kb_getchar() {
     c = buf[buf_i];
 
     buf_len--;
-    if (++buf_i == 100)
+    if (++buf_i == KB_BUF_MAX)
         buf_i = 0;
 
     return c;

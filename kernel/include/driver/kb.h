@@ -9,12 +9,10 @@
 #define KB_ENC     0x60
 #define KB_CTRL    0x64
 
-#define KB_STATUS_OUT 1
-#define KB_STATUS_IN  2
+#define KB_BUF_MAX 100
 
 
 extern void kb_handler();
-static unsigned char shift_key(unsigned char c);
 
 extern unsigned char kb_chetchar();
 extern uint32_t kb_gets(char *buf);
