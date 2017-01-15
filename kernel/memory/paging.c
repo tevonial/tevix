@@ -14,6 +14,9 @@ page_directory_t *kernel_pd;
 static void *tmp_src_page;
 static void *tmp_dst_page;
 
+static page_table_t *backup_pt;
+static uint16_t heap_table_boundary;
+
 /**
  * Constructs new paging structures to allow for 4KiB page sizes
  * and remaps kernel to the same location
@@ -22,29 +25,36 @@ void paging_init() {
     // Install page fault handler
     isr_install_handler(14, page_fault_handler);
 
+    // Allocate initial PDT and one PT for kernel
     kernel_pd = (page_directory_t *)kvalloc(sizeof(page_directory_t));
     page_table_t *pt = (page_table_t *)kvalloc(sizeof(page_table_t));
 
     kernel_pd->phys = ((uint32_t) kernel_pd->table_phys) - VIRTUAL_BASE;
 
-    // Set all page directory entries to not present, read/write, supervisor
+    // Initialize all entries in page directory
     uint32_t i;
     for (i=0; i < 1024; i++) {
         kernel_pd->table_phys[i] = PT_RW;
     }
 
-    // Add page table containing kernel (#786)
+    // Add one page table containing kernel (#786)
     uint32_t kernel_table = VIRTUAL_BASE / 0x400000;
 
     kernel_pd->table[kernel_table] = pt;
     kernel_pd->table_phys[kernel_table] |= ((uint32_t)pt - VIRTUAL_BASE) | PT_PRESENT;
 
-    // Map from 0x0000 to the end of the kernel heap
+    // Map kernel to higher half (0xC0000000 + kernel)
     for (i=0; i<meminfo.kernel_heap_end - VIRTUAL_BASE; i += 0x1000) {
         kernel_pd->table[kernel_table]->page_phys[i / 0x1000] = i | PT_RW | PT_PRESENT;
         bitmap_set(mem_bitmap, i / 0x1000);
     }
 
+    // Boundary is the last PDE kernel is mapped
+    heap_table_boundary = kernel_table + 1;
+    // Rotating ptr to reserved page table
+    backup_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
+
+    // Highest mapped address of heap area
     meminfo.kernel_heap_brk = i + VIRTUAL_BASE;
 
     // Load new page directory
@@ -106,12 +116,28 @@ uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t flags) {
 
     // Page directory entry not present
     if (!(current_pd->table_phys[itable] & PT_PRESENT)) {
-        // Create a new page table
-        page_table_t *new_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
 
-        // Add table to directory
-        current_pd->table_phys[itable] = get_phys(new_pt) | PT_PRESENT  | (flags & 0xFFF);
-        current_pd->table[itable] = new_pt;
+        // Heap space is unmapped; Use backup page table
+        if (itable == heap_table_boundary) {
+
+            // Add table to directory
+            current_pd->table_phys[itable] = get_phys(backup_pt) | PT_PRESENT  | PT_RW;
+            current_pd->table[itable] = backup_pt;
+            heap_table_boundary++;
+
+            // Reserve another backup page table for next time
+            backup_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
+
+
+        // Or, allocate new table on heap
+        } else {
+
+            page_table_t *new_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
+
+            // Add table to directory
+            current_pd->table_phys[itable] = get_phys(new_pt) | PT_PRESENT  | (flags & 0xFFF);
+            current_pd->table[itable] = new_pt;
+        }
     }
  
     // Add page to corresponding the new page table
