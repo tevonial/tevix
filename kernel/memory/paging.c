@@ -9,20 +9,24 @@
 #include <memory/paging.h>
 #include <core/interrupt.h>
 
+
 page_directory_t *current_pd;
 page_directory_t *kernel_pd;
-static void *tmp_src_page;
-static void *tmp_dst_page;
 
 static page_table_t *backup_pt;
 static uint16_t heap_table_boundary;
+
+// Temporary pointers to pages for copying pages
+static void *tmp_src_page;
+static void *tmp_dst_page;
+
 
 /**
  * Constructs new paging structures to allow for 4KiB page sizes
  * and remaps kernel to the same location
  */
 void paging_init() {
-    // Install page fault handler
+    // Fault handler will provide useful debugging info
     isr_install_handler(14, page_fault_handler);
 
     // Allocate initial PDT and one PT for kernel
@@ -49,9 +53,9 @@ void paging_init() {
         bitmap_set(mem_bitmap, i / 0x1000);
     }
 
-    // Boundary is the last PDE kernel is mapped
+    // Boundary is the last present kernel PDE
     heap_table_boundary = kernel_table + 1;
-    // Rotating ptr to reserved page table
+    // Rotating pointer to reserved page table
     backup_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
 
     // Highest mapped address of heap area
@@ -85,6 +89,7 @@ void page_fault_handler(registers_t *r) {
     if (r->err_code & PF_USER)       printf(" [PRIVILEGE]");
     if (r->err_code & PF_RESERVED)   printf(" [RESERVED]");
 
+    // Additional debugging info
     printf("\nebp: %x esp: %x eax: %x ecx: %x edx: %x\n", r->ebp, r->esp, r->eax, r->ecx, r->edx);
     printf("ss=%x useresp=%x eflags=%x cs=%x eip=%x\n", r->ss, r->useresp, r->eflags, r->cs, r->eip);
     abort();
@@ -143,8 +148,6 @@ uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t flags) {
     // Add page to corresponding the new page table
     current_pd->table[itable]->page_phys[ipage] = phys | PT_PRESENT | (flags & 0xFFF);
 
-    //printf("Map page 0x%x to phys 0x%x\n", virt, phys);
-
     return virt;
 }
 
@@ -180,6 +183,7 @@ void move_stack(uint32_t stack, uint32_t limit) {
     asm volatile("mov %%esp, %0" : "=r" (init_esp));
     asm volatile("mov %%ebp, %0" : "=r" (init_ebp));
 
+    // New pointers
     uint32_t ebp = stack - ((uint32_t)_init_stack_end - init_ebp);
     uint32_t esp = stack - ((uint32_t)_init_stack_end - init_esp);
 
@@ -190,6 +194,8 @@ void move_stack(uint32_t stack, uint32_t limit) {
         map_page(i, PT_RW);
 
     for (uint32_t i=0; i<stack - esp; i++) {
+
+        // Offset anything that COULD be a stack frame pointer
         if (old[i] >= init_esp && old[i] <= _init_stack_end)
             new[i] = stack - ((uint32_t)_init_stack_end - old[i]);
         else
@@ -202,19 +208,19 @@ void move_stack(uint32_t stack, uint32_t limit) {
     asm volatile("mov %0, %%ebp;" : : "r" (ebp));
     asm volatile("sti");
 
-    // Clear and add old stack space to the heap
+    // Reuse and recycle (the old stack)
     memset(_init_stack_start, 0, _init_stack_end - _init_stack_start);
     heap_list_add(_init_stack_start, _init_stack_end - _init_stack_start);
 }
 
-
+// Clone an entire VAS
 page_directory_t *clone_pd(page_directory_t* src) {
     page_directory_t *new_pd = (page_directory_t *)kvalloc(sizeof(page_directory_t));
 
     // Set physical address of page directory
     new_pd->phys = get_phys((void *)(new_pd->table_phys));
 
-    // Set aside some kernel space for temporary page mappings
+    // Set aside space for pointers without wasting actual RAM
     if (!tmp_dst_page) {
         tmp_dst_page = (void *)kvalloc(PAGE_SIZE);
         tmp_src_page = (void *)kvalloc(PAGE_SIZE);
@@ -223,8 +229,10 @@ page_directory_t *clone_pd(page_directory_t* src) {
     }
 
     for (int i=0; i<1024; i++) {
-        if (!src->table[i])
+        if (!src->table[i]) {
+            new_pd->table_phys[i] = 0;
             continue;
+        }
 
         if (src->table[i] == kernel_pd->table[i]) {
             new_pd->table[i] = src->table[i];
@@ -240,8 +248,9 @@ page_directory_t *clone_pd(page_directory_t* src) {
     return new_pd;
 }
 
-
+// Copy a page table and each of its present pages
 page_table_t *copy_pt(page_table_t *src) {
+
     page_table_t *new_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
 
     for (uint32_t i=0; i<1024; i++) {
