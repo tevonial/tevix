@@ -122,7 +122,6 @@ void *kmalloc(uint32_t size) {
                 heap_list_add((void *)((uint32_t)block->addr + size), block->size - size);
                 block->size = size;
             }
-            //printf("alloc 0x%x - 0x%x\n", block->addr, block->addr + block->size - 1);
             return block->addr;
         }
     }
@@ -131,14 +130,15 @@ void *kmalloc(uint32_t size) {
     block = heap_list_add((void *)meminfo.kernel_heap_end, size);
     block->free = false;
 
+
+    // Expand kernel heap as needed
+    while (meminfo.kernel_heap_end + size > meminfo.kernel_heap_brk)
+        sbrk();
+
     // Increase the heap pointer
     meminfo.kernel_heap_end += size;
 
-    // Increase kernel heap size if needed
-    while (meminfo.kernel_heap_end >= meminfo.kernel_heap_brk)
-        sbrk();
-
-    //printf("alloc 0x%x - 0x%x\n", block->addr, block->addr + block->size - 1);
+    // printf("kmalloc new 0x%x - 0x%x\n", block->addr, block->addr + block->size - 1);
 
     return block->addr;
 }
@@ -162,11 +162,11 @@ void *kvalloc(uint32_t size) {
     // Increase the heap pointer
     meminfo.kernel_heap_end = addr + size;
 
-    // Increase kernel heap size if needed
-    while (meminfo.kernel_heap_end >= meminfo.kernel_heap_brk)
+    // Expand kernel heap as needed
+    while (meminfo.kernel_heap_end > meminfo.kernel_heap_brk)
         sbrk();
 
-    //printf("alloc 0x%x - 0x%x\n", addr, addr + size - 1);
+    // printf("kvalloc 0x%x - 0x%x\n", addr, addr + size - 1);
 
     return (void *)addr;
 }
