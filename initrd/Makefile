@@ -1,5 +1,5 @@
 CFLAGS:=$(CFLAGS) -ffreestanding -Wall -Wextra
-CPPFLAGS:=$(CPPFLAGS) -D__is_kernel
+CPPFLAGS:=$(CPPFLAGS)
 LDFLAGS:=$(LDFLAGS)
 LIBS:=$(LIBS) -nostdlib -lk -lgcc
 
@@ -11,7 +11,7 @@ src/fork_test.bin\
 all: rdgen $(USER_PROGRAMS)
 
 %.bin : %.asm
-	${AS} -f bin -o $@ $<
+	nasm -f bin -o $@ $<
 	cp $@ root
 
 %.bin : %.c
