@@ -8,7 +8,7 @@ void multitask_init() {
 	move_stack(KSTACK, KSTACK_LIM);
 
 	// Initialize and schedule first thread
-	queue = (scheduler_queue_t *)kmalloc(sizeof(scheduler_queue_t));
+	//queue = (scheduler_queue_t *)kmalloc(sizeof(scheduler_queue_t));
 	scheduler_add(thread_init());
 
 	// Initialize PIT for task switching
@@ -25,9 +25,22 @@ void multitask_init() {
 void scheduler_add(thread_t *thread) {
 	// queue->thread[queue->total++] = thread;
 	// printf("scheduler_add total: %d\n", queue->total);
+	
+	if (thread_queue == 0) {
+		thread_queue = thread;
+		thread->next = 0;
+		return;
+	}
 
-	thread->next = thread_queue;
-	thread_queue = thread;
+	thread_t *iterator = thread_queue;
+	while (iterator->next != 0)
+		iterator = iterator->next;
+
+	iterator->next = thread;
+	thread->next = 0;
+
+	// thread->next = thread_queue;
+	// thread_queue = thread;
 }
 
 void scheduler_remove(thread_t *thread) {
