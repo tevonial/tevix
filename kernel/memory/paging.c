@@ -2,57 +2,58 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <memory/bitmap.h>
 #include <memory/memory.h>
 #include <memory/multiboot.h>
 #include <memory/paging.h>
 #include <core/interrupt.h>
+#include <task/scheduler.h>
 
-
+// Global pointer to page dir currently in use
 page_directory_t *current_pd;
-page_directory_t *kernel_pd;
 
 // Page tables are reserved in advance to avoid having no available mapped heap space
 static page_table_t *reserved_pt;
 
-// Temporary pointers to pages for copying pages
+// For copying pages
 static void *tmp_src_page;
 static void *tmp_dst_page;
 
 
 /**
  * Constructs new paging structures to allow for 4KiB page sizes
- * and remaps kernel to the same location
+ * and remaps kernel to the same virtual location
  */
 void paging_init() {
     // Fault handler will provide useful debugging info
     isr_install_handler(14, page_fault_handler);
 
-    // Allocate initial PDT and one PT for kernel
-    kernel_pd = (page_directory_t *)kvalloc(sizeof(page_directory_t));
-    page_table_t *pt = (page_table_t *)kvalloc(sizeof(page_table_t));
+    // Allocate the initial PDT
+    page_directory_t *pd = (page_directory_t *)kvalloc(sizeof(page_directory_t));
+    pd->phys = ((uint32_t) pd->table_phys) - VIRTUAL_BASE;
+    memset(pd->table, 0, 1024);
+    memset(pd->table_phys, 0, 1024);
 
     // Rotating pointer to reserved page table
     reserved_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
+    memset(reserved_pt, 0, 1024);
 
-    kernel_pd->phys = ((uint32_t) kernel_pd->table_phys) - VIRTUAL_BASE;
-
-    // Initialize all entries in page directory
-    uint32_t i;
-    for (i=0; i < 1024; i++) {
-        kernel_pd->table_phys[i] = PT_RW;
-    }
-
-    // Add one page table containing kernel (#786)
-    uint32_t kernel_table = VIRTUAL_BASE / 0x400000;
-
-    kernel_pd->table[kernel_table] = pt;
-    kernel_pd->table_phys[kernel_table] |= ((uint32_t)pt - VIRTUAL_BASE) | PT_PRESENT;
 
     // Map kernel to higher half (0xC0000000 + kernel)
+    uint32_t i, t;
     for (i=0; i<meminfo.kernel_heap_end - VIRTUAL_BASE; i += 0x1000) {
-        kernel_pd->table[kernel_table]->page_phys[i / 0x1000] = i | PT_RW | PT_PRESENT;
+        // Create new page tables as needed
+        if (!((i + VIRTUAL_BASE) % 0x400000)) {
+            t = (i + VIRTUAL_BASE) / 0x400000;
+            pd->table[t] = (page_table_t *)kvalloc(sizeof(page_table_t));
+            pd->table_phys[t] = ((uint32_t)pd->table[t] - VIRTUAL_BASE) | PT_PRESENT | PT_RW;
+
+        }
+
+        // Reserve and add page
+        pd->table[t]->page_phys[i / 0x1000] = i | PT_RW | PT_PRESENT;
         bitmap_set(mem_bitmap, i / 0x1000);
     }
 
@@ -60,12 +61,9 @@ void paging_init() {
     meminfo.kernel_heap_brk = i + VIRTUAL_BASE;
 
     // Load new page directory
-    switch_pd(kernel_pd);
+    switch_pd(pd);
     // Enable 4KiB pages
     disable_pse();
-
-    // Create new VAS and leave kernel_pd where it is
-    switch_pd(clone_pd(kernel_pd));
 }
 
 void switch_pd(page_directory_t *pd) {
@@ -74,12 +72,6 @@ void switch_pd(page_directory_t *pd) {
 }
 
 void page_fault_handler(registers_t *r) {
-    // Read error flags
-    bool present = !(r->err_code & PF_PRESENT);
-    bool rw = (r->err_code & PF_RW);
-    bool us = (r->err_code & PF_USER);
-    bool reserved = (r->err_code & PF_RESERVED);
-
     // Dump information about fault to screen
     printf("\nPAGE FAULT at 0x%x\nFlags:", get_faulting_address());
     if (!(r->err_code & PF_PRESENT)) printf(" [NONEXISTENT]");
@@ -96,10 +88,6 @@ void page_fault_handler(registers_t *r) {
 uint32_t get_phys(void *virt) {
     uint32_t itable = (uint32_t)virt >> 22;
     uint32_t ipage = (uint32_t)virt >> 12 & 0x03FF;
- 
-    /* If paging stuctures were mapped to last PDE
-    uint32_t *pd = (uint32_t *)0xFFFFF000; 
-    uint32_t *pt = ((uint32_t *)0xFFC00000) + (0x400 * itable);*/
 
     // Check presence of PDE
     if (!(current_pd->table_phys[itable] & PT_PRESENT))
@@ -127,16 +115,15 @@ uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t flags) {
         // Set aside memory for another page table for next time
         reserved_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
     }
- 
+    
     // Add page to corresponding the new page table
     current_pd->table[itable]->page_phys[ipage] = phys | PT_PRESENT | (flags & 0xFFF);
 
     return virt;
 }
 
-/**
- * Map virtual address to first available physical page
- */
+
+// Map virtual address to first available physical page
 uint32_t map_page(uint32_t virt, uint32_t flags) {
     return map_page_to_phys(virt, mem_allocate_frame() * 0x1000, flags);
 }
@@ -198,6 +185,7 @@ void move_stack(uint32_t stack, uint32_t limit) {
 
 // Clone an entire VAS
 page_directory_t *clone_pd(page_directory_t* src) {
+
     page_directory_t *new_pd = (page_directory_t *)kvalloc(sizeof(page_directory_t));
 
     // Set physical address of page directory
@@ -217,13 +205,17 @@ page_directory_t *clone_pd(page_directory_t* src) {
             continue;
         }
 
-        if (src->table[i] == kernel_pd->table[i]) {
+
+        if (i >= (VIRTUAL_BASE / 0x400000) && i <= (meminfo.kernel_heap_brk / 0x400000)) {
+            // If page includes kernel data, point to same page tables
             new_pd->table[i] = src->table[i];
             new_pd->table_phys[i] = src->table_phys[i];
+
         } else {
+            // Or make a copy for user data
             if (src->table_phys[i] & PT_PRESENT) {
                 new_pd->table[i] = copy_pt(src->table[i]);
-                new_pd->table_phys[i] = get_phys(new_pd->table[i]) | PT_PRESENT | PT_RW | PT_USER;
+                new_pd->table_phys[i] = get_phys(new_pd->table[i]) | (src->table_phys[i] & 0xFFF);
             }
         }
     }
@@ -245,7 +237,7 @@ page_table_t *copy_pt(page_table_t *src) {
             invlpg(tmp_src_page);
             invlpg(tmp_dst_page);
 
-            new_pt->page_phys[i] = get_phys(tmp_dst_page) | PT_PRESENT | PT_RW | PT_USER;
+            new_pt->page_phys[i] = get_phys(tmp_dst_page) | (src->page_phys[i] & 0xFFF);
             memcpy(tmp_dst_page, tmp_src_page, 0x1000);
         }
     }
