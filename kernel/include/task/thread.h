@@ -8,7 +8,7 @@
 #include <memory/paging.h>
 #include <memory/heap.h>
 
-#define KSTACK      0xF0000000
+#define KSTACK      0xF03FF000
 #define KSTACK_LIM  0x4000
 
 #define USER_CS     0x1B

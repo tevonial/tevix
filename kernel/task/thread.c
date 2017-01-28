@@ -42,12 +42,6 @@ thread_t *construct_thread(void *start) {
 	return new_thread;
 }
 
-void print_stack(uint32_t *stack) {
-	for (int i=0; i<10; i++) {
-		printf("[esp + %d] = 0x%x\n", i*4, *(stack + i));
-	}
-} 
-
 void preempt() {
 	if (current_thread == 0)
 		return;
@@ -83,20 +77,20 @@ uint32_t fork() {
 	asm volatile("mov %%ebp, %0" : "=r" (ebp));
 
 	thread_t *fork_thread = (thread_t *)kmalloc(sizeof(thread_t));
+	scheduler_add(fork_thread);
 
+	// Set up new thread with unique id and vas
 	fork_thread->pid = pids++;
 	fork_thread->pd = clone_pd(current_thread->pd);
 	fork_thread->ring = current_thread->ring;
 	fork_thread->esp0 = current_thread->esp0;
 
-	fork_thread->esp = esp + 0;
+	fork_thread->esp = esp;
 	fork_thread->ebp = ebp;
 	fork_thread->eip = eip;
 
 	fork_thread->eax = 0;
 	fork_thread->cr3 = fork_thread->pd->phys;
-
-	scheduler_add(fork_thread);
 
 	asm volatile("sti");
 	return fork_thread->pid;
