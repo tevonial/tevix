@@ -38,7 +38,7 @@ void paging_init() {
 
     // Rotating pointer to reserved page table
     reserved_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
-    memset(reserved_pt, 0, 1024);
+    memset(reserved_pt->page_phys, 0, 1024);
 
 
     // Map kernel to higher half (0xC0000000 + kernel)
@@ -180,7 +180,7 @@ void move_stack(uint32_t stack, uint32_t limit) {
 
     // Reuse and recycle (the old stack)
     memset(_init_stack_start, 0, _init_stack_end - _init_stack_start);
-    heap_list_add(_init_stack_start, _init_stack_end - _init_stack_start);
+    heap_add(_init_stack_start, _init_stack_end - _init_stack_start);
 }
 
 // Clone an entire VAS

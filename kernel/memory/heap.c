@@ -10,28 +10,19 @@ void heap_init() {
     heap_list.size = 0;
 }
 
-heap_block_t *heap_list_add(void *addr, uint32_t size) {
-    uint32_t i = 0;
-    while (block_pool[i].size != 0)
-        i++;
-
-    heap_block_t *new_block = &block_pool[i];
-
-    new_block->addr = addr;
-    new_block->size = size;
-    new_block->free = true;
-
+static void heap_list_add(heap_block_t *block) {
     // Insert entry in sorted list
-    i = 0;
+    uint32_t i = 0;
     while (i < heap_list.size) {
-        if (heap_list.block[i++]->size >= new_block->size)
+        if (heap_list.block[i]->size >= block->size)
             break;
+        i++;
     }
 
     heap_block_t *tmp, *tmp2;
 
     tmp = heap_list.block[i];
-    heap_list.block[i] = new_block;
+    heap_list.block[i] = block;
 
     while (i < heap_list.size) {
         i++;
@@ -41,11 +32,9 @@ heap_block_t *heap_list_add(void *addr, uint32_t size) {
     }
 
     heap_list.size++;
-
-    return new_block;
 }
 
-void heap_list_remove(heap_block_t *block) {
+static void heap_list_remove(heap_block_t *block) {
     block->size = 0;
     heap_list.size--;
 
@@ -57,6 +46,22 @@ void heap_list_remove(heap_block_t *block) {
         heap_list.block[i] = heap_list.block[i+1];
         i++;
     }
+}
+
+heap_block_t *heap_add(void *addr, uint32_t size) {
+    uint32_t i = 0;
+    while (block_pool[i].size != 0)
+        i++;
+
+    heap_block_t *new_block = &block_pool[i];
+
+    new_block->addr = addr;
+    new_block->size = size;
+    new_block->free = true;
+
+    heap_list_add(new_block);
+
+    return new_block;
 }
 
 void kfree(void *addr) {
@@ -76,8 +81,6 @@ void kfree(void *addr) {
             heap_list.block[i]->addr < right->addr)
             right = heap_list.block[i];
     }
-
-    //printf("kfree 0x%x - 0x%x\n", block->addr, block->addr + block->size - 1);
 
     // Prepare to create new block
     void *new_addr = block->addr;
@@ -104,7 +107,7 @@ void kfree(void *addr) {
     if (do_new_block) {
         heap_list_remove(block);
         // Create new, bigger block
-        heap_list_add(new_addr, new_size);
+        heap_add(new_addr, new_size);
     } else {
         block->free = true;
     }
@@ -119,15 +122,18 @@ void *kmalloc(uint32_t size) {
 
             block->free = false;        // Reserve block
             if (block->size > size) {   // Split block if neccesary
-                heap_list_add((void *)((uint32_t)block->addr + size), block->size - size);
+                heap_add((void *)((uint32_t)block->addr + size), block->size - size);
+                
+                heap_list_remove(block);
                 block->size = size;
+                heap_list_add(block);
             }
             return block->addr;
         }
     }
 
     // No block found, create new block
-    block = heap_list_add((void *)meminfo.kernel_heap_end, size);
+    block = heap_add((void *)meminfo.kernel_heap_end, size);
     block->free = false;
 
 
@@ -137,8 +143,6 @@ void *kmalloc(uint32_t size) {
 
     // Increase the heap pointer
     meminfo.kernel_heap_end += size;
-
-    // printf("kmalloc new 0x%x - 0x%x\n", block->addr, block->addr + block->size - 1);
 
     return block->addr;
 }
@@ -152,11 +156,11 @@ void *kvalloc(uint32_t size) {
         addr += PAGE_SIZE;
 
         // Add gap created from alignment to heap blocks
-        heap_list_add((void *)meminfo.kernel_heap_end, addr - meminfo.kernel_heap_end);
+        heap_add((void *)meminfo.kernel_heap_end, addr - meminfo.kernel_heap_end);
     }
 
     // Allocate block in heap
-    heap_block_t *new_block = heap_list_add((void *)addr, size);
+    heap_block_t *new_block = heap_add((void *)addr, size);
     new_block->free = false;
 
     // Increase the heap pointer
@@ -165,8 +169,6 @@ void *kvalloc(uint32_t size) {
     // Expand kernel heap as needed
     while (meminfo.kernel_heap_end > meminfo.kernel_heap_brk)
         sbrk();
-
-    // printf("kvalloc 0x%x - 0x%x\n", addr, addr + size - 1);
 
     return (void *)addr;
 }

@@ -22,7 +22,7 @@ heap_list_t heap_list;
 heap_block_t block_pool[MAX_HEAP_BLOCKS];
 
 void heap_init();
-
+heap_block_t *heap_add(void *addr, uint32_t size);
 void kfree(void *addr);
 void *kmalloc(uint32_t size);
 void *kvalloc(uint32_t size);
