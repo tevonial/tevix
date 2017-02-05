@@ -10,8 +10,8 @@ void heap_init() {
     heap_list.size = 0;
 }
 
+// Insert heap block in sorted list
 static void heap_list_add(heap_block_t *block) {
-    // Insert entry in sorted list
     uint32_t i = 0;
     while (i < heap_list.size) {
         if (heap_list.block[i]->size >= block->size)
@@ -65,43 +65,33 @@ heap_block_t *heap_add(void *addr, uint32_t size) {
 }
 
 void kfree(void *addr) {
-    heap_block_t *left, *block, *right;
-    left = right = heap_list.block[0];
+    heap_block_t *block;
+    int i = 0;
 
-    // Find indexes of block, block to left, and block to right
-    for (uint32_t i=0; i < heap_list.size; i++) {
-        if (heap_list.block[i]->addr == addr)
-            block = heap_list.block[i];
-
-        if (heap_list.block[i]->addr < addr &&
-            heap_list.block[i]->addr > left->addr)
-            left = heap_list.block[i];
-
-        if (heap_list.block[i]->addr > addr &&
-            heap_list.block[i]->addr < right->addr)
-            right = heap_list.block[i];
-    }
+    while (block = heap_list.block[i++])
+        if (block->addr == addr)
+            break;
 
     // Prepare to create new block
     void *new_addr = block->addr;
     uint32_t new_size = block->size;
     bool do_new_block = false;
 
-    // Check if block to left is free
-    if (left->addr + left->size == block->addr && left->free) {
-        new_addr = left->addr;
-        new_size += left->size;
+    // Check if block to block->l is free
+    if (block->l->free) {
+        new_addr = block->l->addr;
+        new_size += block->l->size;
         do_new_block = true;
 
-        heap_list_remove(left);
+        heap_list_remove(block->l);
     }
 
-    // Check if block to right is free
-    if (block->addr + block->size == right->addr && right->free) {
-        new_size += right->size;
+    // Check if block to block->r is free
+    if (block->r->free) {
+        new_size += block->r->size;
         do_new_block = true;
 
-        heap_list_remove(right);
+        heap_list_remove(block->r);
     }
 
     if (do_new_block) {
@@ -122,8 +112,13 @@ void *kmalloc(uint32_t size) {
 
             block->free = false;        // Reserve block
             if (block->size > size) {   // Split block if neccesary
-                heap_add((void *)((uint32_t)block->addr + size), block->size - size);
+                heap_block_t *split = heap_add((void *)((uint32_t)block->addr + size), block->size - size);
+
+                block->r = split;
+                split->l = block;
+                split->r = block->r;
                 
+                // Reorder block in list as size has changed
                 heap_list_remove(block);
                 block->size = size;
                 heap_list_add(block);
@@ -135,6 +130,10 @@ void *kmalloc(uint32_t size) {
     // No block found, create new block
     block = heap_add((void *)meminfo.kernel_heap_end, size);
     block->free = false;
+
+    block->l = heap_list.high;
+    heap_list.high->r = block;
+    heap_list.high = block;
 
 
     // Expand kernel heap as needed
@@ -156,12 +155,20 @@ void *kvalloc(uint32_t size) {
         addr += PAGE_SIZE;
 
         // Add gap created from alignment to heap blocks
-        heap_add((void *)meminfo.kernel_heap_end, addr - meminfo.kernel_heap_end);
+        heap_block_t *gap = heap_add((void *)meminfo.kernel_heap_end, addr - meminfo.kernel_heap_end);
+
+        gap->l = heap_list.high;
+        heap_list.high->r = gap;
+        heap_list.high = gap;
     }
 
     // Allocate block in heap
     heap_block_t *new_block = heap_add((void *)addr, size);
     new_block->free = false;
+
+    new_block->l = heap_list.high;
+    heap_list.high->r = new_block;
+    heap_list.high = new_block;
 
     // Increase the heap pointer
     meminfo.kernel_heap_end = addr + size;

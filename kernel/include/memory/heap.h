@@ -6,15 +6,20 @@
 
 #define MAX_HEAP_BLOCKS 1000
 
-typedef struct {
+typedef struct heap_block {
 	void *addr;
 	uint32_t size;
 	bool free;
+
+	// Blocks to the immediate left and right
+	struct heap_block *l;
+	struct heap_block *r;
 } heap_block_t;
 
 typedef struct {
 	uint32_t size;
 	uint32_t limit;
+	heap_block_t *high;
 	heap_block_t *block[MAX_HEAP_BLOCKS];
 } heap_list_t;
 
