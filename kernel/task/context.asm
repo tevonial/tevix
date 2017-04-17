@@ -1,8 +1,7 @@
-section .text
+[SECTION .text]
 
 global get_eip
 global become_user
-
 global switch_context
 
 get_eip:
@@ -52,15 +51,3 @@ switch_context:
 
 	sti
 	ret
-
-
-switch_context_old:
-	cli
-	mov ecx, [esp+4]   ; eip
-	mov eax, [esp+8]   ; physical address of current directory
-	mov ebp, [esp+12]  ; ebp
-	mov esp, [esp+16]  ; esp
-	mov cr3, eax       ; set the page directory
-	mov eax, 0x1       ; magic number to detect a task switch
-	sti
-	jmp ecx
