@@ -114,10 +114,11 @@ void *kmalloc(uint32_t size) {
             if (block->size > size) {   // Split block if neccesary
                 heap_block_t *split = heap_add((void *)((uint32_t)block->addr + size), block->size - size);
 
-                block->r = split;
+                // Modify neighbor pointers
                 split->l = block;
                 split->r = block->r;
-                
+                block->r = split;
+                                
                 // Reorder block in list as size has changed
                 heap_list_remove(block);
                 block->size = size;

@@ -45,7 +45,7 @@ void paging_init() {
     uint32_t i, t;
     for (i=0; i<meminfo.kernel_heap_end - VIRTUAL_BASE; i += 0x1000) {
         // Create new page tables as needed
-        if (!((i + VIRTUAL_BASE) % 0x400000)) {
+        if (!(i % 0x400000)) {  // Check if page is on boundary of next page table
             t = (i + VIRTUAL_BASE) / 0x400000;
             pd->table[t] = (page_table_t *)kvalloc(sizeof(page_table_t));
             pd->table_phys[t] = ((uint32_t)pd->table[t] - VIRTUAL_BASE) | PT_PRESENT | PT_RW;
@@ -107,13 +107,18 @@ uint32_t map_page_to_phys(uint32_t virt, uint32_t phys, uint32_t flags) {
 
     // Page directory entry not present
     if (!(current_pd->table_phys[itable] & PT_PRESENT)) {
+        printf("need new pt for 0x%x\n", virt);
 
         // Add reserved table to directory
         current_pd->table_phys[itable] = get_phys(reserved_pt) | PT_PRESENT  | (flags & 0xFFF);
         current_pd->table[itable] = reserved_pt;
 
+        printf("using 0x%x - ", reserved_pt);
+
         // Set aside memory for another page table for next time
         reserved_pt = (page_table_t *)kvalloc(sizeof(page_table_t));
+
+        printf("reserving 0x%x\n", reserved_pt);
     }
     
     // Add page to corresponding the new page table
